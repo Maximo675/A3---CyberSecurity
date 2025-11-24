@@ -1,4 +1,5 @@
 import os
+import time
 import logging
 from dotenv import load_dotenv
 from flask import Flask, request, redirect, url_for, session
@@ -37,12 +38,12 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = SECRET_KEY # Chave para sessões (A02)
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_NAME}.db' 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app) # Inicializa o Bcrypt para hashing seguro de senhas (A02)
 
-Failed_Login_Attempts = {}
+FAILED_LOGIN_ATTEMPTS = {}
 MAX_ATTEMPTS = 5
+LOCKOUT_TIME = 300  # 5 minutos
 LOCKOUT_TIME = 300  # 5 minutos
 
 # ----------------------------------------------------------------------
@@ -130,6 +131,23 @@ def create_admin():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    client_ip = request.remote_addr # Pega o IP do cliente
+    
+    # --- NOVO: LÓGICA DE RATE LIMITING (A07) ---
+    if client_ip in FAILED_LOGIN_ATTEMPTS:
+        attempts, lock_time = FAILED_LOGIN_ATTEMPTS[client_ip]
+        current_time = time.time()
+        
+        # 1. Checa se o IP está bloqueado
+        if attempts >= MAX_ATTEMPTS and current_time < lock_time + LOCKOUT_TIME:
+            remaining_time = int(lock_time + LOCKOUT_TIME - current_time)
+            logger.warning(f"Acesso BLOQUEADO (A07) por rate limiting. IP: {client_ip}. Tempo restante: {remaining_time}s")
+            return f"Acesso bloqueado por muitas tentativas. Tente novamente em {remaining_time} segundos.", 429 # Too Many Requests
+        
+        # 2. Reseta a contagem se o tempo de bloqueio já passou
+        elif attempts >= MAX_ATTEMPTS and current_time >= lock_time + LOCKOUT_TIME:
+            FAILED_LOGIN_ATTEMPTS.pop(client_ip, None) # Remove ou reseta o IP
+
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -141,12 +159,28 @@ def login():
             session['logged_in'] = True
             session['user_id'] = user.id
             session['user_role'] = user.role
+            
+            # Limpa a contagem de falhas do IP
+            FAILED_LOGIN_ATTEMPTS.pop(client_ip, None) 
+            
             logger.info(f"Login BEM-SUCEDIDO. Usuário ID: {user.id}, Role: {user.role}") # Log (A09)
             return redirect(url_for('index'))
         else:
             # Login MAL-SUCEDIDO
-            logger.warning(f"Login MAL-SUCEDIDO. Tentativa com usuário: {username}") # Log (A09)
-            return "Credenciais inválidas ou usuário não encontrado.", 401
+            
+            # Incrementa o contador de falhas (A07)
+            FAILED_LOGIN_ATTEMPTS[client_ip] = [
+                FAILED_LOGIN_ATTEMPTS.get(client_ip, [0, 0])[0] + 1, 
+                time.time() if FAILED_LOGIN_ATTEMPTS.get(client_ip, [0, 0])[0] + 1 >= MAX_ATTEMPTS else 0
+            ]
+            
+            logger.warning(f"Login MAL-SUCEDIDO. Tentativa com usuário: {username}. IP: {client_ip}") # Log (A09)
+            
+            # Retorna o erro 
+            attempts_left = MAX_ATTEMPTS - FAILED_LOGIN_ATTEMPTS[client_ip][0]
+            if attempts_left <= 0:
+                return "Credenciais inválidas. Seu IP foi bloqueado temporariamente (A07).", 401
+            return f"Credenciais inválidas ou usuário não encontrado. Tentativas restantes: {attempts_left}", 401
             
     return """
         <h2>Login</h2>
