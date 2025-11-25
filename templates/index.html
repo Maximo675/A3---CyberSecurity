@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Início - Sistema de Doações{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h1 class="h4 mb-3">Bem-vindo ao Gerenciamento de Doações</h1>
+
+                <p>
+                    Status:
+                    {% if is_logged_in %}
+                        <span class="badge bg-success">Online</span>
+                    {% else %}
+                        <span class="badge bg-secondary">Offline</span>
+                    {% endif %}
+                </p>
+
+                <p>Perfil atual: <strong>{{ user_role }}</strong></p>
+                <p class="text-muted">
+                    Total de itens registrados: <strong>{{ doacoes|length }}</strong>
+                </p>
+
+                {% if not is_logged_in %}
+                    <a href="{{ url_for('login') }}" class="btn btn-primary">Fazer Login</a>
+                {% else %}
+                    <a href="{{ url_for('nova_doacao') }}" class="btn btn-success me-2">
+                        Registrar Nova Doação
+                    </a>
+                    {% if user_role == 'admin' %}
+                        <a href="{{ url_for('register_voluntario') }}" class="btn btn-outline-primary">
+                            Gerenciar Usuários
+                        </a>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                Doações Registradas
+            </div>
+            <div class="card-body p-0">
+                {% if doacoes %}
+                    <table class="table table-striped mb-0">
+                        <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Tipo</th>
+                            <th>Quantidade</th>
+                            <th>Registrado por</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for d in doacoes %}
+                            <tr>
+                                <td>{{ d.id }}</td>
+                                <td>{{ d.tipo }}</td>
+                                <td>{{ d.quantidade }}</td>
+                                <td>{{ d.registrador.username if d.registrador else '-' }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p class="p-3 mb-0">Nenhuma doação registrada ainda.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
