@@ -1,17 +1,15 @@
 import os
-<<<<<<< HEAD
 import time
 import logging
 from dotenv import load_dotenv
-from flask import Flask, request, redirect, url_for, session
-=======
-import logging
-from dotenv import load_dotenv
-from flask import Flask, request, redirect, url_for, session, render_template, flash
->>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
+from flask import (
+    Flask, request, redirect, url_for, session, 
+    render_template, flash, jsonify
+)
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from functools import wraps
+from sqlalchemy.exc import IntegrityError
 
 # ----------------------------------------------------------------------
 # 1. CONFIGURAÇÃO DE SEGURANÇA E LOGGING (A09)
@@ -42,25 +40,19 @@ app = Flask(__name__)
 
 # Configurações do Flask e DB
 app.config['SECRET_KEY'] = SECRET_KEY # Chave para sessões (A02)
+# Usando f-string para o URI do banco de dados SQLite
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_NAME}.db' 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-<<<<<<< HEAD
-db = SQLAlchemy(app)
-bcrypt = Bcrypt(app) # Inicializa o Bcrypt para hashing seguro de senhas (A02)
 
+# Variáveis de Rate Limiting (A07)
 FAILED_LOGIN_ATTEMPTS = {}
 MAX_ATTEMPTS = 5
 LOCKOUT_TIME = 300  # 5 minutos
-LOCKOUT_TIME = 300  # 5 minutos
-=======
 
+# Inicialização de Extensões
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app) # Inicializa o Bcrypt para hashing seguro de senhas (A02)
 
-Failed_Login_Attempts = {}
-MAX_ATTEMPTS = 5
-LOCKOUT_TIME = 300  # 5 minutos
->>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
 
 # ----------------------------------------------------------------------
 # 2. FUNÇÕES DE SEGURANÇA (A02 e A04)
@@ -68,6 +60,7 @@ LOCKOUT_TIME = 300  # 5 minutos
 
 def set_password(password):
     """Cria o hash seguro da senha antes de armazenar (A02)."""
+    # decode('utf-8') é usado para garantir que o hash seja uma string
     return bcrypt.generate_password_hash(password).decode('utf-8')
 
 def check_password(password_hash, password):
@@ -80,12 +73,15 @@ def role_required(role):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if not session.get('logged_in'):
+                flash("Você precisa estar logado para acessar esta página.", "info")
                 return redirect(url_for('login')) # Se não está logado
             
             # Checa se o role do usuário é igual ao role exigido pela rota
             if session.get('user_role') != role:
-                logger.error(f"Acesso NEGADO. Usuário ID {session.get('user_id')} tentou acessar área de {role}") # Log (A09)
-                return "Acesso negado. Permissão insuficiente.", 403 
+                user_id = session.get('user_id', 'Unknown')
+                logger.error(f"Acesso NEGADO. Usuário ID {user_id} tentou acessar área de {role}") # Log (A09)
+                flash(f"Acesso negado. Permissão insuficiente. Requer: {role}", "danger")
+                return redirect(url_for('index')) 
             
             return f(*args, **kwargs)
         return decorated_function
@@ -147,10 +143,13 @@ def create_admin():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-<<<<<<< HEAD
+    
+    # Se você tivesse um template HTML (login.html) você usaria:
+    # return render_template('login.html')
+
     client_ip = request.remote_addr # Pega o IP do cliente
     
-    # --- NOVO: LÓGICA DE RATE LIMITING (A07) ---
+    # --- LÓGICA DE RATE LIMITING (A07) ---
     if client_ip in FAILED_LOGIN_ATTEMPTS:
         attempts, lock_time = FAILED_LOGIN_ATTEMPTS[client_ip]
         current_time = time.time()
@@ -159,14 +158,14 @@ def login():
         if attempts >= MAX_ATTEMPTS and current_time < lock_time + LOCKOUT_TIME:
             remaining_time = int(lock_time + LOCKOUT_TIME - current_time)
             logger.warning(f"Acesso BLOQUEADO (A07) por rate limiting. IP: {client_ip}. Tempo restante: {remaining_time}s")
-            return f"Acesso bloqueado por muitas tentativas. Tente novamente em {remaining_time} segundos.", 429 # Too Many Requests
+            flash(f"Acesso bloqueado por muitas tentativas. Tente novamente em {remaining_time} segundos.", "danger")
+            return redirect(url_for('login'))
         
         # 2. Reseta a contagem se o tempo de bloqueio já passou
         elif attempts >= MAX_ATTEMPTS and current_time >= lock_time + LOCKOUT_TIME:
             FAILED_LOGIN_ATTEMPTS.pop(client_ip, None) # Remove ou reseta o IP
 
-=======
->>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
+
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -174,7 +173,6 @@ def login():
         user = User.query.filter_by(username=username).first()
 
         if user and check_password(user.password_hash, password):
-<<<<<<< HEAD
             # Login BEM-SUCEDIDO
             session['logged_in'] = True
             session['user_id'] = user.id
@@ -184,110 +182,67 @@ def login():
             FAILED_LOGIN_ATTEMPTS.pop(client_ip, None) 
             
             logger.info(f"Login BEM-SUCEDIDO. Usuário ID: {user.id}, Role: {user.role}") # Log (A09)
+            flash('Login realizado com sucesso!', 'success')
             return redirect(url_for('index'))
         else:
             # Login MAL-SUCEDIDO
             
             # Incrementa o contador de falhas (A07)
-            FAILED_LOGIN_ATTEMPTS[client_ip] = [
-                FAILED_LOGIN_ATTEMPTS.get(client_ip, [0, 0])[0] + 1, 
-                time.time() if FAILED_LOGIN_ATTEMPTS.get(client_ip, [0, 0])[0] + 1 >= MAX_ATTEMPTS else 0
-            ]
+            current_attempts = FAILED_LOGIN_ATTEMPTS.get(client_ip, [0, 0])[0] + 1
+            
+            if current_attempts >= MAX_ATTEMPTS:
+                FAILED_LOGIN_ATTEMPTS[client_ip] = [current_attempts, time.time()]
+                flash("Credenciais inválidas. Seu IP foi bloqueado temporariamente (A07).", "danger")
+            else:
+                FAILED_LOGIN_ATTEMPTS[client_ip] = [current_attempts, 0]
+                attempts_left = MAX_ATTEMPTS - current_attempts
+                flash(f"Credenciais inválidas ou usuário não encontrado. Tentativas restantes: {attempts_left}", "warning")
             
             logger.warning(f"Login MAL-SUCEDIDO. Tentativa com usuário: {username}. IP: {client_ip}") # Log (A09)
-            
-            # Retorna o erro 
-            attempts_left = MAX_ATTEMPTS - FAILED_LOGIN_ATTEMPTS[client_ip][0]
-            if attempts_left <= 0:
-                return "Credenciais inválidas. Seu IP foi bloqueado temporariamente (A07).", 401
-            return f"Credenciais inválidas ou usuário não encontrado. Tentativas restantes: {attempts_left}", 401
+            return redirect(url_for('login'))
             
     return """
         <h2>Login</h2>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class=flashes>
+                {% for category, message in messages %}
+                <li class="{{ category }}">{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
         <form method="post">
             Username: <input type="text" name="username" required><br>
             Password: <input type="password" name="password" required><br>
             <input type="submit" value="Entrar">
         </form>
         <p>Use: admin / SenhaForte123 (Após rodar 'flask create-admin')</p>
-        <p>Ou acesse <a href="/register_voluntario">Registrar Voluntário</a> (se for admin)</p>
+        <p>Ou acesse <a href="/register_voluntario">Registrar Voluntário</a></p>
     """
-=======
-            session['logged_in'] = True
-            session['user_id'] = user.id
-            session['user_role'] = user.role
-            logger.info(f"Login BEM-SUCEDIDO. Usuário ID: {user.id}, Role: {user.role}")
-            flash('Login realizado com sucesso!', 'success')
-            return redirect(url_for('index'))
-        else:
-            logger.warning(f"Login MAL-SUCEDIDO. Tentativa com usuário: {username}")
-            flash('Credenciais inválidas ou usuário não encontrado.', 'danger')
-            return redirect(url_for('login'))
 
-    return render_template('login.html')
-
-
-
->>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
 
 @app.route('/logout')
 def logout():
     user_id = session.get('user_id', 'Unknown')
     session.clear()
-<<<<<<< HEAD
-    logger.info(f"Logout realizado para o Usuário ID: {user_id}") # Log (A09)
-    return redirect(url_for('index'))
 
-@app.route('/register_voluntario', methods=['GET', 'POST'])
-@role_required('admin') # APENAS ADMIN PODE ACESSAR (A04)
-=======
-    logger.info(f"Logout realizado para o Usuário ID: {user_id}")
+    logger.info(f"Logout realizado para o Usuário ID: {user_id}") # Log (A09)
     flash('Logout realizado com sucesso.', 'info')
     return redirect(url_for('index'))
 
 
 @app.route('/register_voluntario', methods=['GET', 'POST'])
-@role_required('admin')
->>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
+@role_required('admin') # APENAS ADMIN PODE ACESSAR (A04)
 def register_voluntario():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        role = request.form.get('role', 'voluntario')
-<<<<<<< HEAD
+        # Garante que, se a role for omitida, seja 'voluntario' (A04)
+        role = request.form.get('role', 'voluntario') 
+
         
         # 1. Validação de dados de entrada (A03)
-        if not username or not password or len(password) < 8:
-            return "Nome de usuário e senha (mínimo 8 caracteres) são obrigatórios.", 400
-
-        if User.query.filter_by(username=username).first():
-            return "Nome de usuário já existe.", 400
-
-        # 2. Hashing Seguro (A02)
-        hashed_password = set_password(password)
-        
-        new_user = User()
-        new_user.username = username
-        new_user.password_hash = hashed_password
-        new_user.role = role
-
-        db.session.add(new_user)
-        db.session.commit()
-        
-        logger.info(f"Novo usuário criado por Admin (ID: {session.get('user_id')}). Username: {username}, Role: {role}") # Log (A09)
-        return f"Voluntário/Usuário {username} criado com sucesso!", 201
-
-    return f"""
-        <h2>Registrar Novo Voluntário (Apenas Admin)</h2>
-        <form method="post">
-            Username: <input type="text" name="username" required><br>
-            Password: <input type="password" name="password" required minlength="8"><br>
-            Role (admin/voluntario): <input type="text" name="role" value="voluntario"><br>
-            <input type="submit" value="Registrar">
-        </form>
-    """
-=======
-
         if not username or not password or len(password) < 8:
             flash("Nome de usuário e senha (mínimo 8 caracteres) são obrigatórios.", "warning")
             return redirect(url_for('register_voluntario'))
@@ -296,27 +251,47 @@ def register_voluntario():
             flash("Nome de usuário já existe.", "danger")
             return redirect(url_for('register_voluntario'))
 
+        # 2. Hashing Seguro (A02)
         hashed_password = set_password(password)
+        
+        try:
+            new_user = User()
+            new_user.username = username
+            new_user.password_hash = hashed_password
+            new_user.role = role
 
-        new_user = User(
-            username=username,
-            password_hash=hashed_password,
-            role=role
-        )
+            db.session.add(new_user)
+            db.session.commit()
+            
+            logger.info(f"Novo usuário criado por Admin (ID: {session.get('user_id')}). Username: {username}, Role: {role}") # Log (A09)
+            flash(f"Usuário {username} criado com sucesso!", "success")
+            return redirect(url_for('index'))
+        except IntegrityError:
+            # Caso raro onde o username foi adicionado por outro processo após a verificação
+            db.session.rollback()
+            flash("Erro ao registrar: nome de usuário duplicado.", "danger")
+            return redirect(url_for('register_voluntario'))
 
-        db.session.add(new_user)
-        db.session.commit()
+    return """
+        <h2>Registrar Novo Voluntário (Apenas Admin)</h2>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class=flashes>
+                {% for category, message in messages %}
+                <li class="{{ category }}">{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+        <form method="post">
+            Username: <input type="text" name="username" required><br>
+            Password: <input type="password" name="password" required minlength="8"><br>
+            Role (admin/voluntario): <input type="text" name="role" value="voluntario"><br>
+            <input type="submit" value="Registrar">
+        </form>
+        <p><a href="/">Voltar</a></p>
+    """
 
-        logger.info(
-            f"Novo usuário criado por Admin (ID: {session.get('user_id')}). "
-            f"Username: {username}, Role: {role}"
-        )
-        flash(f"Usuário {username} criado com sucesso!", "success")
-        return redirect(url_for('index'))
-
-    return render_template('register_voluntario.html')
-
->>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
 
 # ----------------------------------------------------------------------
 # 5. ROTAS DA APLICAÇÃO PRINCIPAL (COM SEGURANÇA INTEGRADA)
@@ -326,64 +301,60 @@ def register_voluntario():
 def index():
     is_logged_in = session.get('logged_in', False)
     user_role = session.get('user_role', 'Convidado')
-<<<<<<< HEAD
     
     # Consulta segura (A03)
     doacoes = Doacao.query.all() 
     
+    # Lógica para exibir mensagens flash
+    flashes = ""
+    for category, message in app.extensions['flashes'].get('flashes', []):
+        flashes += f'<li class="{category}">{message}</li>'
+
     return f"""
         <h1>Bem-vindo ao Gerenciamento de Doações</h1>
+        <ul class="flashes">{flashes}</ul>
         <p>Status: Logado como {user_role} ({'Online' if is_logged_in else 'Offline'})</p>
         <p>Total de itens registrados: {len(doacoes)}</p>
         <p><a href="/login">Login</a> | <a href="/logout">Logout</a></p>
         {'<p><a href="/nova_doacao">Registrar Nova Doação</a></p>' if is_logged_in else '<p>Faça login para registrar doações.</p>'}
         {'<p><a href="/register_voluntario">Gerenciar Usuários (Admin)</a></p>' if user_role == 'admin' else ''}
+        
+        <h2>Doações Registradas:</h2>
+        <ul>
+            {''.join(f'<li>{d.tipo}: {d.quantidade} (Por Usuário {d.voluntario_id})</li>' for d in doacoes)}
+        </ul>
     """
 
 @app.route('/nova_doacao', methods=['GET', 'POST'])
 @role_required('voluntario') # Protegido pelo Design Seguro (A04)
-=======
-    doacoes = Doacao.query.all()
-
-    return render_template(
-        'index.html',
-        is_logged_in=is_logged_in,
-        user_role=user_role,
-        doacoes=doacoes
-    )
-
-
-
-
-
-@app.route('/nova_doacao', methods=['GET', 'POST'])
-@role_required('voluntario')
->>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
 def nova_doacao():
     if request.method == 'POST':
         tipo = request.form.get('tipo')
         quantidade_str = request.form.get('quantidade')
 
-<<<<<<< HEAD
         # 1. VERIFICAÇÃO DE EXISTÊNCIA (Obrigatório para A03)
         if not tipo or not quantidade_str:
-            return "Erro: Tipo e Quantidade são campos obrigatórios.", 400
+            flash("Tipo e Quantidade são campos obrigatórios.", "warning")
+            return redirect(url_for('nova_doacao'))
 
         # 2. CONVERSÃO SEGURA (A03)
         try:
-            quantidade = int(quantidade_str) 
+            quantidade = int(quantidade_str)
         except ValueError:
             logger.warning(f"Tentativa de registro de doação com quantidade inválida: {quantidade_str}") # Log (A09)
-            return "Quantidade deve ser um número inteiro válido.", 400
+            flash("Quantidade deve ser um número inteiro válido.", "danger")
+            return redirect(url_for('nova_doacao'))
 
-        # 3. VERIFICAÇÃO DE CONTEÚDO (A03)
+        # 3. VERIFICAÇÃO DE CONTEÚDO (A03: XSS Prevention)
+        # Verifica se o campo 'tipo' tem um tamanho aceitável e não contém tags HTML
         if not (1 < len(tipo) < 80) or ('<' in tipo or '>' in tipo):
             logger.warning(f"Tentativa de registro de doação com tipo suspeito: {tipo}") # Log (A09)
-            return "Tipo de doação inválido.", 400
+            flash("Tipo de doação inválido. Evite caracteres especiais como '<' e '>'.", "danger")
+            return redirect(url_for('nova_doacao'))
 
         # --- FIM DA VALIDAÇÃO ---
 
-        user_id = session.get('user_id') 
+        user_id = session.get('user_id')
 
         nova = Doacao()
         nova.tipo = tipo
@@ -394,55 +365,29 @@ def nova_doacao():
         db.session.commit()
         
         logger.info(f"Doação registrada por User ID: {user_id}. Tipo: {tipo}.") # Log (A09)
+        flash("Doação registrada com sucesso!", "success")
         return redirect(url_for('index'))
 
     return """
         <h2>Registrar Nova Doação</h2>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class=flashes>
+                {% for category, message in messages %}
+                <li class="{{ category }}">{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
         <form method="post">
             <label>Tipo:</label><input type="text" name="tipo" required><br>
             <label>Quantidade:</label><input type="number" name="quantidade" required min="1"><br>
             <input type="submit" value="Registrar Doação">
         </form>
+        <p><a href="/">Voltar</a></p>
     """
-=======
-        if not tipo or not quantidade_str:
-            flash("Tipo e Quantidade são campos obrigatórios.", "warning")
-            return redirect(url_for('nova_doacao'))
-
-        try:
-            quantidade = int(quantidade_str)
-        except ValueError:
-            logger.warning(f"Tentativa de registro de doação com quantidade inválida: {quantidade_str}")
-            flash("Quantidade deve ser um número inteiro válido.", "danger")
-            return redirect(url_for('nova_doacao'))
-
-        if not (1 < len(tipo) < 80) or ('<' in tipo or '>' in tipo):
-            logger.warning(f"Tentativa de registro de doação com tipo suspeito: {tipo}")
-            flash("Tipo de doação inválido.", "danger")
-            return redirect(url_for('nova_doacao'))
-
-        user_id = session.get('user_id')
-
-        nova = Doacao(
-            tipo=tipo,
-            quantidade=quantidade,
-            voluntario_id=user_id
-        )
-
-        db.session.add(nova)
-        db.session.commit()
-
-        logger.info(f"Doação registrada por User ID: {user_id}. Tipo: {tipo}.")
-        flash("Doação registrada com sucesso!", "success")
-        return redirect(url_for('index'))
-
-    return render_template('nova_doacao.html')
-
-
->>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
 
 
 if __name__ == '__main__':
-    # É fundamental rodar a aplicação em modo debug=False em produção.
-    # Usamos debug=True apenas para desenvolvimento.
+    # Em produção, use debug=False
     app.run(debug=True)
