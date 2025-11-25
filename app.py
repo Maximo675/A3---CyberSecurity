@@ -77,7 +77,7 @@ def role_required(role):
                 return redirect(url_for('login')) # Se não está logado
             
             # Checa se o role do usuário é igual ao role exigido pela rota
-            if session.get('user_role') != role:
+            if session.get('user_role') != role and session.get('user_role') != 'admin':
                 user_id = session.get('user_id', 'Unknown')
                 logger.error(f"Acesso NEGADO. Usuário ID {user_id} tentou acessar área de {role}") # Log (A09)
                 flash(f"Acesso negado. Permissão insuficiente. Requer: {role}", "danger")
@@ -144,9 +144,6 @@ def create_admin():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     
-    # Se você tivesse um template HTML (login.html) você usaria:
-    # return render_template('login.html')
-
     client_ip = request.remote_addr # Pega o IP do cliente
     
     # --- LÓGICA DE RATE LIMITING (A07) ---
@@ -201,25 +198,8 @@ def login():
             logger.warning(f"Login MAL-SUCEDIDO. Tentativa com usuário: {username}. IP: {client_ip}") # Log (A09)
             return redirect(url_for('login'))
             
-    return """
-        <h2>Login</h2>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <ul class=flashes>
-                {% for category, message in messages %}
-                <li class="{{ category }}">{{ message }}</li>
-                {% endfor %}
-                </ul>
-            {% endif %}
-        {% endwith %}
-        <form method="post">
-            Username: <input type="text" name="username" required><br>
-            Password: <input type="password" name="password" required><br>
-            <input type="submit" value="Entrar">
-        </form>
-        <p>Use: admin / SenhaForte123 (Após rodar 'flask create-admin')</p>
-        <p>Ou acesse <a href="/register_voluntario">Registrar Voluntário</a></p>
-    """
+    # Usa template (Mudança principal)
+    return render_template('login.html', user_role=session.get('user_role', 'Convidado'))
 
 
 @app.route('/logout')
@@ -272,25 +252,8 @@ def register_voluntario():
             flash("Erro ao registrar: nome de usuário duplicado.", "danger")
             return redirect(url_for('register_voluntario'))
 
-    return """
-        <h2>Registrar Novo Voluntário (Apenas Admin)</h2>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <ul class=flashes>
-                {% for category, message in messages %}
-                <li class="{{ category }}">{{ message }}</li>
-                {% endfor %}
-                </ul>
-            {% endif %}
-        {% endwith %}
-        <form method="post">
-            Username: <input type="text" name="username" required><br>
-            Password: <input type="password" name="password" required minlength="8"><br>
-            Role (admin/voluntario): <input type="text" name="role" value="voluntario"><br>
-            <input type="submit" value="Registrar">
-        </form>
-        <p><a href="/">Voltar</a></p>
-    """
+    # Usa template (Mudança principal)
+    return render_template('register_voluntario.html', user_role=session.get('user_role', 'Convidado'))
 
 
 # ----------------------------------------------------------------------
@@ -299,31 +262,17 @@ def register_voluntario():
 
 @app.route('/')
 def index():
-    is_logged_in = session.get('logged_in', False)
-    user_role = session.get('user_role', 'Convidado')
-    
     # Consulta segura (A03)
     doacoes = Doacao.query.all() 
     
-    # Lógica para exibir mensagens flash
-    flashes = ""
-    for category, message in app.extensions['flashes'].get('flashes', []):
-        flashes += f'<li class="{category}">{message}</li>'
-
-    return f"""
-        <h1>Bem-vindo ao Gerenciamento de Doações</h1>
-        <ul class="flashes">{flashes}</ul>
-        <p>Status: Logado como {user_role} ({'Online' if is_logged_in else 'Offline'})</p>
-        <p>Total de itens registrados: {len(doacoes)}</p>
-        <p><a href="/login">Login</a> | <a href="/logout">Logout</a></p>
-        {'<p><a href="/nova_doacao">Registrar Nova Doação</a></p>' if is_logged_in else '<p>Faça login para registrar doações.</p>'}
-        {'<p><a href="/register_voluntario">Gerenciar Usuários (Admin)</a></p>' if user_role == 'admin' else ''}
-        
-        <h2>Doações Registradas:</h2>
-        <ul>
-            {''.join(f'<li>{d.tipo}: {d.quantidade} (Por Usuário {d.voluntario_id})</li>' for d in doacoes)}
-        </ul>
-    """
+    # Usa template (Mudança principal)
+    return render_template(
+        'index.html', 
+        is_logged_in=session.get('logged_in', False),
+        user_role=session.get('user_role', 'Convidado'),
+        doacoes=doacoes,
+        # O Flask já passa 'get_flashed_messages()' automaticamente no contexto
+    )
 
 @app.route('/nova_doacao', methods=['GET', 'POST'])
 @role_required('voluntario') # Protegido pelo Design Seguro (A04)
@@ -368,24 +317,8 @@ def nova_doacao():
         flash("Doação registrada com sucesso!", "success")
         return redirect(url_for('index'))
 
-    return """
-        <h2>Registrar Nova Doação</h2>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <ul class=flashes>
-                {% for category, message in messages %}
-                <li class="{{ category }}">{{ message }}</li>
-                {% endfor %}
-                </ul>
-            {% endif %}
-        {% endwith %}
-        <form method="post">
-            <label>Tipo:</label><input type="text" name="tipo" required><br>
-            <label>Quantidade:</label><input type="number" name="quantidade" required min="1"><br>
-            <input type="submit" value="Registrar Doação">
-        </form>
-        <p><a href="/">Voltar</a></p>
-    """
+    # Usa template (Mudança principal)
+    return render_template('nova_doacao.html', user_role=session.get('user_role', 'Convidado'))
 
 
 if __name__ == '__main__':
