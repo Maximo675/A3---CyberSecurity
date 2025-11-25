@@ -1,8 +1,14 @@
 import os
+<<<<<<< HEAD
 import time
 import logging
 from dotenv import load_dotenv
 from flask import Flask, request, redirect, url_for, session
+=======
+import logging
+from dotenv import load_dotenv
+from flask import Flask, request, redirect, url_for, session, render_template, flash
+>>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from functools import wraps
@@ -38,6 +44,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = SECRET_KEY # Chave para sessões (A02)
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_NAME}.db' 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+<<<<<<< HEAD
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app) # Inicializa o Bcrypt para hashing seguro de senhas (A02)
 
@@ -45,6 +52,15 @@ FAILED_LOGIN_ATTEMPTS = {}
 MAX_ATTEMPTS = 5
 LOCKOUT_TIME = 300  # 5 minutos
 LOCKOUT_TIME = 300  # 5 minutos
+=======
+
+db = SQLAlchemy(app)
+bcrypt = Bcrypt(app) # Inicializa o Bcrypt para hashing seguro de senhas (A02)
+
+Failed_Login_Attempts = {}
+MAX_ATTEMPTS = 5
+LOCKOUT_TIME = 300  # 5 minutos
+>>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
 
 # ----------------------------------------------------------------------
 # 2. FUNÇÕES DE SEGURANÇA (A02 e A04)
@@ -131,6 +147,7 @@ def create_admin():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+<<<<<<< HEAD
     client_ip = request.remote_addr # Pega o IP do cliente
     
     # --- NOVO: LÓGICA DE RATE LIMITING (A07) ---
@@ -148,6 +165,8 @@ def login():
         elif attempts >= MAX_ATTEMPTS and current_time >= lock_time + LOCKOUT_TIME:
             FAILED_LOGIN_ATTEMPTS.pop(client_ip, None) # Remove ou reseta o IP
 
+=======
+>>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -155,6 +174,7 @@ def login():
         user = User.query.filter_by(username=username).first()
 
         if user and check_password(user.password_hash, password):
+<<<<<<< HEAD
             # Login BEM-SUCEDIDO
             session['logged_in'] = True
             session['user_id'] = user.id
@@ -192,21 +212,49 @@ def login():
         <p>Use: admin / SenhaForte123 (Após rodar 'flask create-admin')</p>
         <p>Ou acesse <a href="/register_voluntario">Registrar Voluntário</a> (se for admin)</p>
     """
+=======
+            session['logged_in'] = True
+            session['user_id'] = user.id
+            session['user_role'] = user.role
+            logger.info(f"Login BEM-SUCEDIDO. Usuário ID: {user.id}, Role: {user.role}")
+            flash('Login realizado com sucesso!', 'success')
+            return redirect(url_for('index'))
+        else:
+            logger.warning(f"Login MAL-SUCEDIDO. Tentativa com usuário: {username}")
+            flash('Credenciais inválidas ou usuário não encontrado.', 'danger')
+            return redirect(url_for('login'))
+
+    return render_template('login.html')
+
+
+
+>>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
 
 @app.route('/logout')
 def logout():
     user_id = session.get('user_id', 'Unknown')
     session.clear()
+<<<<<<< HEAD
     logger.info(f"Logout realizado para o Usuário ID: {user_id}") # Log (A09)
     return redirect(url_for('index'))
 
 @app.route('/register_voluntario', methods=['GET', 'POST'])
 @role_required('admin') # APENAS ADMIN PODE ACESSAR (A04)
+=======
+    logger.info(f"Logout realizado para o Usuário ID: {user_id}")
+    flash('Logout realizado com sucesso.', 'info')
+    return redirect(url_for('index'))
+
+
+@app.route('/register_voluntario', methods=['GET', 'POST'])
+@role_required('admin')
+>>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
 def register_voluntario():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
         role = request.form.get('role', 'voluntario')
+<<<<<<< HEAD
         
         # 1. Validação de dados de entrada (A03)
         if not username or not password or len(password) < 8:
@@ -238,6 +286,37 @@ def register_voluntario():
             <input type="submit" value="Registrar">
         </form>
     """
+=======
+
+        if not username or not password or len(password) < 8:
+            flash("Nome de usuário e senha (mínimo 8 caracteres) são obrigatórios.", "warning")
+            return redirect(url_for('register_voluntario'))
+
+        if User.query.filter_by(username=username).first():
+            flash("Nome de usuário já existe.", "danger")
+            return redirect(url_for('register_voluntario'))
+
+        hashed_password = set_password(password)
+
+        new_user = User(
+            username=username,
+            password_hash=hashed_password,
+            role=role
+        )
+
+        db.session.add(new_user)
+        db.session.commit()
+
+        logger.info(
+            f"Novo usuário criado por Admin (ID: {session.get('user_id')}). "
+            f"Username: {username}, Role: {role}"
+        )
+        flash(f"Usuário {username} criado com sucesso!", "success")
+        return redirect(url_for('index'))
+
+    return render_template('register_voluntario.html')
+
+>>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
 
 # ----------------------------------------------------------------------
 # 5. ROTAS DA APLICAÇÃO PRINCIPAL (COM SEGURANÇA INTEGRADA)
@@ -247,6 +326,7 @@ def register_voluntario():
 def index():
     is_logged_in = session.get('logged_in', False)
     user_role = session.get('user_role', 'Convidado')
+<<<<<<< HEAD
     
     # Consulta segura (A03)
     doacoes = Doacao.query.all() 
@@ -262,11 +342,29 @@ def index():
 
 @app.route('/nova_doacao', methods=['GET', 'POST'])
 @role_required('voluntario') # Protegido pelo Design Seguro (A04)
+=======
+    doacoes = Doacao.query.all()
+
+    return render_template(
+        'index.html',
+        is_logged_in=is_logged_in,
+        user_role=user_role,
+        doacoes=doacoes
+    )
+
+
+
+
+
+@app.route('/nova_doacao', methods=['GET', 'POST'])
+@role_required('voluntario')
+>>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
 def nova_doacao():
     if request.method == 'POST':
         tipo = request.form.get('tipo')
         quantidade_str = request.form.get('quantidade')
 
+<<<<<<< HEAD
         # 1. VERIFICAÇÃO DE EXISTÊNCIA (Obrigatório para A03)
         if not tipo or not quantidade_str:
             return "Erro: Tipo e Quantidade são campos obrigatórios.", 400
@@ -306,6 +404,42 @@ def nova_doacao():
             <input type="submit" value="Registrar Doação">
         </form>
     """
+=======
+        if not tipo or not quantidade_str:
+            flash("Tipo e Quantidade são campos obrigatórios.", "warning")
+            return redirect(url_for('nova_doacao'))
+
+        try:
+            quantidade = int(quantidade_str)
+        except ValueError:
+            logger.warning(f"Tentativa de registro de doação com quantidade inválida: {quantidade_str}")
+            flash("Quantidade deve ser um número inteiro válido.", "danger")
+            return redirect(url_for('nova_doacao'))
+
+        if not (1 < len(tipo) < 80) or ('<' in tipo or '>' in tipo):
+            logger.warning(f"Tentativa de registro de doação com tipo suspeito: {tipo}")
+            flash("Tipo de doação inválido.", "danger")
+            return redirect(url_for('nova_doacao'))
+
+        user_id = session.get('user_id')
+
+        nova = Doacao(
+            tipo=tipo,
+            quantidade=quantidade,
+            voluntario_id=user_id
+        )
+
+        db.session.add(nova)
+        db.session.commit()
+
+        logger.info(f"Doação registrada por User ID: {user_id}. Tipo: {tipo}.")
+        flash("Doação registrada com sucesso!", "success")
+        return redirect(url_for('index'))
+
+    return render_template('nova_doacao.html')
+
+
+>>>>>>> 8da029a234a99407d7d587c689f0d746240a2f9a
 
 
 if __name__ == '__main__':
