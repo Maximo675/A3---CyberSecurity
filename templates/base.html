@@ -25,11 +25,11 @@
 
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav me-auto">
-                {% if session.get('logged_in') %}
+                {% if current_user.is_authenticated %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('nova_doacao') }}">Nova Doação</a>
                     </li>
-                    {% if session.get('user_role') == 'admin' %}
+                    {% if current_user.is_authenticated and current_user.role == 'admin' %}
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('register_voluntario') }}">
                                 Gerenciar Usuários
@@ -39,10 +39,10 @@
                 {% endif %}
             </ul>
             <ul class="navbar-nav ms-auto">
-                {% if session.get('logged_in') %}
+                {% if current_user.is_authenticated %}
                     <li class="nav-item">
                         <span class="navbar-text me-3">
-                            Logado como: {{ session.get('user_role') }}
+                            Logado como: {{ current_user.role }}
                         </span>
                     </li>
                     <li class="nav-item">

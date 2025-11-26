@@ -3,13 +3,23 @@ import time
 import logging
 from dotenv import load_dotenv
 from flask import (
-    Flask, request, redirect, url_for, session, 
-    render_template, flash, jsonify
+    Flask, request, redirect, url_for, session,
+    render_template, flash
 )
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from functools import wraps
 from sqlalchemy.exc import IntegrityError
+from flask_wtf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_session import Session
+from flask_talisman import Talisman
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
+from decimal import Decimal, InvalidOperation, getcontext
+import time # Já está presente
+## NOVO: MÓDULO DE PAGAMENTO
+from pagamentos import process_pix, process_card # Importa as funções de pagamento simulado
 
 # ----------------------------------------------------------------------
 # 1. CONFIGURAÇÃO DE SEGURANÇA E LOGGING (A09)
@@ -33,7 +43,9 @@ load_dotenv()
 DB_USER = os.getenv("DB_USER", "default_user")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "default_pass")
 DB_NAME = os.getenv("DB_NAME", "doacoes_app")
-SECRET_KEY = os.getenv("SECRET_KEY", "SUA_CHAVE_SECRETA_PADRAO")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY is not set; set environment variable SECRET_KEY")
 
 # Configuração da aplicação Flask
 app = Flask(__name__)
@@ -43,15 +55,50 @@ app.config['SECRET_KEY'] = SECRET_KEY # Chave para sessões (A02)
 # Usando f-string para o URI do banco de dados SQLite
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_NAME}.db' 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SESSION_TYPE'] = 'filesystem'  # Server-side sessions; use redis in production
+app.config['SESSION_FILE_DIR'] = os.path.join(app.instance_path, 'flask_session')
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = 1800  # 30 minutes
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = True  # Requires HTTPS in production
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # Variáveis de Rate Limiting (A07)
 FAILED_LOGIN_ATTEMPTS = {}
 MAX_ATTEMPTS = 5
 LOCKOUT_TIME = 300  # 5 minutos
 
+# Configurações de Cookies Seguros (A02 e A09)
+app.config.update({
+  'SESSION_COOKIE_HTTPONLY': True,
+  'SESSION_COOKIE_SECURE': True,  # garantir HTTPS
+  'SESSION_COOKIE_SAMESITE': 'Lax'
+})
+
 # Inicialização de Extensões
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app) # Inicializa o Bcrypt para hashing seguro de senhas (A02)
+csrf = CSRFProtect(app)  # Proteção CSRF para formulários
+sess = Session(app)  # Server-side session support
+limiter = Limiter(app, key_func=get_remote_address)  # Rate limiting
+Talisman(app, content_security_policy={
+    'default-src': ["'self'"],
+    'script-src': ["'self'", 'https://cdn.jsdelivr.net'],
+    'style-src': ["'self'", 'https://cdn.jsdelivr.net'],
+}, force_https=False)  # In production, set force_https=True
+
+# Login manager
+# Flask-Login setup
+login_manager = LoginManager()
+login_manager.login_view = 'login'
+login_manager.init_app(app)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    if user_id is None:
+        return None
+    return User.query.get(int(user_id))
 
 
 # ----------------------------------------------------------------------
@@ -72,13 +119,12 @@ def role_required(role):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            if not session.get('logged_in'):
+            if not current_user.is_authenticated:
                 flash("Você precisa estar logado para acessar esta página.", "info")
                 return redirect(url_for('login')) # Se não está logado
-            
             # Checa se o role do usuário é igual ao role exigido pela rota
-            if session.get('user_role') != role and session.get('user_role') != 'admin':
-                user_id = session.get('user_id', 'Unknown')
+            if getattr(current_user, 'role', None) != role and getattr(current_user, 'role', None) != 'admin':
+                user_id = getattr(current_user, 'id', 'Unknown')
                 logger.error(f"Acesso NEGADO. Usuário ID {user_id} tentou acessar área de {role}") # Log (A09)
                 flash(f"Acesso negado. Permissão insuficiente. Requer: {role}", "danger")
                 return redirect(url_for('index')) 
@@ -91,13 +137,14 @@ def role_required(role):
 # 3. MODELOS DE DADOS
 # ----------------------------------------------------------------------
 
-class User(db.Model):
+class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False) # Armazena o hash (A02)
     role = db.Column(db.String(20), nullable=False, default='voluntario') # admin, voluntario (A04)
     
-    donations = db.relationship('Doacao', backref='registrador', lazy=True)
+    # Use back_populates so both sides are declared explicitly and visible to static checkers
+    donations = db.relationship('Doacao', back_populates='registrador', lazy=True)
 
     def __repr__(self):
         return f'<User {self.username}>'
@@ -105,9 +152,11 @@ class User(db.Model):
 class Doacao(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     tipo = db.Column(db.String(80), nullable=False) 
-    quantidade = db.Column(db.Integer, nullable=False)
+    quantidade = db.Column(db.Numeric(12, 2), nullable=False)  # Use Numeric for monetary values
     # Relação com a tabela User (A04)
     voluntario_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False) 
+    # Explicit relationship on the Doacao side (makes Doacao.registrador available)
+    registrador = db.relationship('User', back_populates='donations')
 
     def __repr__(self):
         return f'<Doacao {self.tipo}>'
@@ -125,7 +174,9 @@ with app.app_context():
 def create_admin():
     """Comando para criar um usuário administrador inicial."""
     admin_username = os.getenv("ADMIN_USER", "admin") 
-    admin_password = os.getenv("ADMIN_PASS", "SenhaForte123") 
+    admin_password = os.getenv("ADMIN_PASS")
+    if not admin_password:
+        raise RuntimeError("ADMIN_PASS must be set to create admin user. Set ADMIN_PASS in environment variables.")
 
     with app.app_context():
         if User.query.filter_by(username=admin_username).first() is None:
@@ -142,6 +193,7 @@ def create_admin():
             print(f"Usuário admin '{admin_username}' já existe.")
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
 def login():
     
     client_ip = request.remote_addr # Pega o IP do cliente
@@ -171,9 +223,9 @@ def login():
 
         if user and check_password(user.password_hash, password):
             # Login BEM-SUCEDIDO
-            session['logged_in'] = True
-            session['user_id'] = user.id
-            session['user_role'] = user.role
+            session.clear()
+            session.permanent = True
+            login_user(user, remember=False)
             
             # Limpa a contagem de falhas do IP
             FAILED_LOGIN_ATTEMPTS.pop(client_ip, None) 
@@ -199,13 +251,14 @@ def login():
             return redirect(url_for('login'))
             
     # Usa template (Mudança principal)
-    return render_template('login.html', user_role=session.get('user_role', 'Convidado'))
+    return render_template('login.html')
 
 
 @app.route('/logout')
+@login_required
 def logout():
-    user_id = session.get('user_id', 'Unknown')
-    session.clear()
+    user_id = current_user.get_id() or 'Unknown'
+    logout_user()
 
     logger.info(f"Logout realizado para o Usuário ID: {user_id}") # Log (A09)
     flash('Logout realizado com sucesso.', 'info')
@@ -214,6 +267,7 @@ def logout():
 
 @app.route('/register_voluntario', methods=['GET', 'POST'])
 @role_required('admin') # APENAS ADMIN PODE ACESSAR (A04)
+@limiter.limit("5 per minute")
 def register_voluntario():
     if request.method == 'POST':
         username = request.form.get('username')
@@ -243,7 +297,7 @@ def register_voluntario():
             db.session.add(new_user)
             db.session.commit()
             
-            logger.info(f"Novo usuário criado por Admin (ID: {session.get('user_id')}). Username: {username}, Role: {role}") # Log (A09)
+            logger.info(f"Novo usuário criado por Admin (ID: {getattr(current_user, 'id', 'Unknown')}). Username: {username}, Role: {role}") # Log (A09)
             flash(f"Usuário {username} criado com sucesso!", "success")
             return redirect(url_for('index'))
         except IntegrityError:
@@ -253,7 +307,7 @@ def register_voluntario():
             return redirect(url_for('register_voluntario'))
 
     # Usa template (Mudança principal)
-    return render_template('register_voluntario.html', user_role=session.get('user_role', 'Convidado'))
+    return render_template('register_voluntario.html', user_role=getattr(current_user, 'role', 'Convidado'))
 
 
 # ----------------------------------------------------------------------
@@ -263,19 +317,21 @@ def register_voluntario():
 @app.route('/')
 def index():
     # Consulta segura (A03)
-    doacoes = Doacao.query.all() 
+    # Ajustando para carregar o username do registrador (voluntario)
+    doacoes = Doacao.query.options(db.joinedload(Doacao.registrador)).all() 
     
     # Usa template (Mudança principal)
     return render_template(
         'index.html', 
-        is_logged_in=session.get('logged_in', False),
-        user_role=session.get('user_role', 'Convidado'),
+        is_logged_in=current_user.is_authenticated,
+        user_role=getattr(current_user, 'role', 'Convidado'),
         doacoes=doacoes,
         # O Flask já passa 'get_flashed_messages()' automaticamente no contexto
     )
 
 @app.route('/nova_doacao', methods=['GET', 'POST'])
 @role_required('voluntario') # Protegido pelo Design Seguro (A04)
+@limiter.limit("10 per minute")
 def nova_doacao():
     if request.method == 'POST':
         tipo = request.form.get('tipo')
@@ -288,8 +344,12 @@ def nova_doacao():
 
         # 2. CONVERSÃO SEGURA (A03)
         try:
-            quantidade = int(quantidade_str)
-        except ValueError:
+            # Use Decimal for quantities if these are monetary; otherwise ensure integer counts
+            quantidade = Decimal(quantidade_str)
+            if quantidade % 1 != 0:
+                # Keep quantity as integer-like number if representing items
+                raise InvalidOperation
+        except (InvalidOperation, ValueError):
             logger.warning(f"Tentativa de registro de doação com quantidade inválida: {quantidade_str}") # Log (A09)
             flash("Quantidade deve ser um número inteiro válido.", "danger")
             return redirect(url_for('nova_doacao'))
@@ -303,7 +363,7 @@ def nova_doacao():
 
         # --- FIM DA VALIDAÇÃO ---
 
-        user_id = session.get('user_id')
+        user_id = current_user.get_id()
 
         nova = Doacao()
         nova.tipo = tipo
@@ -318,9 +378,109 @@ def nova_doacao():
         return redirect(url_for('index'))
 
     # Usa template (Mudança principal)
-    return render_template('nova_doacao.html', user_role=session.get('user_role', 'Convidado'))
+    return render_template('nova_doacao.html', user_role=getattr(current_user, 'role', 'Convidado'))
+
+## NOVO: MÓDULO DE PAGAMENTO
+@app.route('/doar', methods=['GET', 'POST'])
+@role_required('voluntario') # Apenas usuários logados podem fazer doações registradas
+@limiter.limit("20 per minute")
+def doar_pagamento():
+    """
+    Rota para exibir o formulário de pagamento (GET) e processar a doação (POST).
+    """
+    if request.method == 'POST':
+        method = request.form.get('method')
+        amount_str = request.form.get('amount')
+        user_id = current_user.get_id()
+
+        try:
+            # 1. VALIDAÇÃO E CONVERSÃO SEGURA (A03)
+            if amount_str is None or amount_str.strip() == "":
+                # Garante que não passaremos None para float() e valida entrada vazia
+                raise ValueError("Valor de doação não informado")
+            # Converte valores com vírgula para ponto e remove espaços
+            amount_str_clean = amount_str.strip().replace(',', '.')
+            
+            # conversão segura para decimal
+            from decimal import Decimal, InvalidOperation, getcontext
+            getcontext().prec = 28
+            try:
+                amount = Decimal(amount_str_clean)
+                if amount <= 0:
+                    raise ValueError
+            except InvalidOperation:
+                logger.warning(f"Tentativa de doação financeira com valor inválido por User ID: {user_id}. Valor: {amount_str}")
+                flash("Valor de doação inválido. Insira um valor positivo.", "danger")
+                return redirect(url_for('doar_pagamento'))
+
+        except (ValueError, TypeError):
+            logger.warning(f"Tentativa de doação financeira com valor inválido por User ID: {user_id}. Valor: {amount_str}")
+            flash("Valor de doação inválido. Insira um valor positivo.", "danger")
+            return redirect(url_for('doar_pagamento'))
+
+        if method == 'pix':
+            payer_id = request.form.get('payer_id', f"User_{user_id}")
+            
+            # Chama a função simulada de pagamento PIX
+            result = process_pix(amount, payer_id)
+
+            if result['status'] == 'success':
+                # Em um app real, aqui você registraria a transação pendente no BD.
+                logger.info(f"PIX gerado por User ID: {user_id}. Valor: {amount:.2f}. TX ID: {result['tx_id']}")
+                flash(f"PIX gerado com sucesso! Use o código/QR Code para pagar. (ID: {result['tx_id']})", "success")
+            else:
+                logger.error(f"Erro ao gerar PIX para User ID: {user_id}. Erro: {result['message']}")
+                flash(f"Erro ao gerar PIX: {result['message']}", "danger")
+            
+            return redirect(url_for('doar_pagamento'))
+
+        elif method == 'card':
+            # Captura os dados do cartão (NÃO SEGURO em produção real)
+            card_number = request.form.get('card_number')
+            card_holder = request.form.get('card_holder')
+            expiry = request.form.get('expiry')
+            cvv = request.form.get('cvv')
+
+            # Chama a função simulada de pagamento Cartão
+            # Mask PAN for logging. Never log full card numbers or CVV in production.
+            masked_pan = (card_number[-4:].rjust(len(card_number), '*')) if card_number else None
+            logger.info(f"Iniciando processamento de cartão para User ID: {user_id}. PAN (masked): {masked_pan}")
+            result = process_card(amount, card_number, card_holder, expiry, cvv)
+
+            if result['status'] == 'success':
+                # REGISTRO FINAL DA DOAÇÃO COMO ITEM (Simplificado para o modelo existente)
+                try:
+                    # Registramos como um "item" de tipo "Financeira"
+                    nova = Doacao()
+                    nova.tipo = "Doação Financeira (R$)"
+                    nova.quantidade = amount # Armazena o valor (float)
+                    nova.voluntario_id = user_id
+                    db.session.add(nova)
+                    db.session.commit()
+                    
+                    logger.info(f"Doação com cartão aprovada e registrada. User ID: {user_id}. Valor: R$ {amount:.2f}. TX ID: {result['tx_id']}")
+                    flash(f"Doação com cartão de R$ {amount:.2f} aprovada e registrada! Obrigado.", "success")
+                except Exception as e:
+                    db.session.rollback()
+                    logger.critical(f"Falha CRÍTICA ao salvar doação financeira após aprovação! User ID: {user_id}. Erro: {e}")
+                    flash("Pagamento aprovado, mas falha ao registrar no banco de dados. Contate o suporte.", "danger")
+                    
+            else:
+                logger.warning(f"Pagamento com cartão recusado para User ID: {user_id}. Erro: {result['message']}")
+                flash(f"Pagamento recusado: {result['message']}", "danger")
+            
+            return redirect(url_for('doar_pagamento'))
+
+        else:
+            flash("Método de pagamento não suportado.", "warning")
+            return redirect(url_for('doar_pagamento'))
+
+
+    return render_template('pagamento.html', user_role=getattr(current_user, 'role', 'Convidado'))
+# FIM DA ROTA DE PAGAMENTO ##
 
 
 if __name__ == '__main__':
-    # Em produção, use debug=False
-    app.run(debug=True)
+    # Em produção, use debug=False; control via env
+    debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+    app.run(debug=debug_mode)

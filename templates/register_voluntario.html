@@ -10,6 +10,8 @@
                 <h2 class="h4 mb-3">Registrar Novo Usuário (Apenas Admin)</h2>
 
                 <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                     <div class="mb-3">
                         <label for="username" class="form-label">Usuário</label>
                         <input type="text" class="form-control" id="username"

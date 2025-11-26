@@ -10,6 +10,7 @@
                 <h2 class="h4 mb-3">Registrar Nova Doação</h2>
 
                 <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
                     <div class="mb-3">
                         <label for="tipo" class="form-label">Tipo</label>
                         <input type="text" class="form-control" id="tipo"
