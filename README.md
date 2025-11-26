@@ -1,60 +1,138 @@
-Sistema de Gerenciamento de Doações
+Este projeto foi desenvolvido para a disciplina de Segurança e Sitemas Computacionais, como avaliação da A3.
+O sistema implementa um Gerenciador de Doações com login seguro, diferentes níveis de acesso e módulo de pagamento simulado (PIX e Cartão).
 
-Este repositório contém o projeto desenvolvido para a disciplina de Segurança e Sistemas Operacionais.
-O objetivo é implementar um sistema simples de gerenciamento de doações utilizando Flask, SQLite e boas práticas de segurança.
+A aplicação foi construída utilizando:
 
-Funcionalidades:
-
-- Sistema de login (admin e voluntário)
-- Cadastro de voluntários (somente admin)
-- Registro de doações (somente voluntário)
-- Listagem das doações registradas
-- Controle de sessão com Flask
-- Hash seguro de senhas (bcrypt)
-- Validação de dados e prevenção de erros comuns
-- Registro de logs de segurança
-
-Tecnologias Utilizadas:
-
-- Python 3
-- Flask
-- Flask-Bcrypt
-- Flask-SQLAlchemy
+- Python + Flask
+- HTML + Bootstrap
 - SQLite
-- HTML / Jinja2 / Bootstrap
 
-Como executar o projeto:
+Boas práticas de segurança:
 
-1. Instale as dependências:
-   bash
-   pip install flask flask_sqlalchemy flask_bcrypt python-dotenv
+- Hash de senha (bcrypt)
+- Controle de sessão
+- Controle de acesso por função (admin/voluntário)
+- Validações de entrada (OWASP A03)
+- Proteção contra endpoint overrides (A04)
+- Logging centralizado (A09)
+- Separação de templates e instância do banco
 
-2. Execute o script para criar o admin (opcional):
-   bash
-   flask create-admin
+Funcionalidades Principais
 
-3. Inicie o servidor:
-   bash
-   python app.py
+Autenticação:
 
-4. Acesse no navegador:
-   http://127.0.0.1:5000/
-   
-Estrutura do Projeto
+- Login com validação segura
+- Logout
+- Senhas armazenadas com hash bcrypt
+- Controle de tentativas inválidas
 
-/instance
-  └── doacoes_app.db       # Banco de dados
+Controle de Acesso:
 
-/templates
-  ├── base.html
-  ├── index.html
-  ├── login.html
-  ├── nova_doacao.html
-  └── register_voluntario.html
+Admin:
+- Acessa todas as funções
+- Cadastra novos voluntários
+- Visualiza todas as doações
 
-app.py                      # Arquivo principal
-security.log                # Logs de segurança
+Voluntário:
+- Registra novas doações
+- Visualiza doações
+- Acessa módulo de pagamento
 
-*Observação
+Gerenciamento de Doações
+- Registrar novo item doado
 
-Este projeto foi desenvolvido exclusivamente para fins acadêmicos, com foco em princípios de segurança, não sendo recomendado para uso em produção sem ajustes adicionais.
+Campos:
+- Tipo
+- Quantidade
+- Responsável (automático pelo login)
+
+Listagem com:
+- ID
+- Tipo
+- Quantidade
+- Registrado por
+
+Módulo de Pagamento (Simulado)
+
+Inclui dois fluxos:
+- PIX (simulado)
+Gera:
+- TxID
+- QR Code (fake)
+- Mensagem de sucesso
+
+Cartão (simulado)
+- Validação mínima
+Gera:
+- TxID
+- Status aprovado / erro simulado
+
+Importante: Nenhum dado real de cartão é armazenado.
+
+Interface
+
+- Baseada em Bootstrap
+- Navbar adaptável (mobile)
+- Layout padronizado em base.html
+
+Templates:
+- index
+- login
+- registro de voluntário
+- nova doação
+- pagamento
+
+Estrutura de Pastas
+
+/
+│── app.py
+│── requirements.txt
+│── security.log
+│── instance/
+│      └── doacoes_app.db
+│── templates/
+       ├── base.html
+       ├── index.html
+       ├── login.html
+       ├── nova_doacao.html
+       ├── pagamento.html
+       └── register_voluntario.html
+
+Segurança Implementada (OWASP Top 10)
+       
+| OWASP                        | Implementação                                    |
+| ---------------------------- | ------------------------------------------------ |
+| A02 – Cryptographic Failures | Hash seguro (bcrypt), .env, SECRET_KEY           |
+| A03 – Injection              | Validações, conversões seguras, sanitização      |
+| A04 – Insecure Design        | Controle de sessão por função (admin/voluntário) |
+| A09 – Logging                | Logs para logins, erros, tentativas suspeitas    |
+| Outros                       | Proteção de rotas com decorators                 |
+
+
+Como Executar o Projeto Localmente
+1 - Instale o Python
+
+2 - Instale as dependências
+
+No terminal, rode:
+pip install -r requirements.txt
+
+3 - Rode o app
+python app.py
+
+4 - Acesse no navegador:
+http://127.0.0.1:5000
+
+
+Criando o usuário administrador
+
+Antes de usar o sistema, execute:
+flask create-admin
+
+Criará:
+
+- Usuário: admin
+
+- Senha: SenhaForte123
+
+Depois você pode adicionar voluntários pelo próprio sistema.
