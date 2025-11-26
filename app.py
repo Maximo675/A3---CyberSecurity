@@ -81,11 +81,12 @@ bcrypt = Bcrypt(app) # Inicializa o Bcrypt para hashing seguro de senhas (A02)
 csrf = CSRFProtect(app)  # Proteção CSRF para formulários
 sess = Session(app)  # Server-side session support
 limiter = Limiter(app, key_func=get_remote_address)  # Rate limiting
+force_https = os.getenv('FORCE_HTTPS', 'false').lower() == 'true'
 Talisman(app, content_security_policy={
     'default-src': ["'self'"],
     'script-src': ["'self'", 'https://cdn.jsdelivr.net'],
     'style-src': ["'self'", 'https://cdn.jsdelivr.net'],
-}, force_https=False)  # In production, set force_https=True
+}, force_https=force_https)  # Set via env var to enforce HTTPS in production
 
 # Login manager
 # Flask-Login setup
@@ -224,7 +225,6 @@ def login():
         if user and check_password(user.password_hash, password):
             # Login BEM-SUCEDIDO
             session.clear()
-            session.permanent = True
             login_user(user, remember=False)
             
             # Limpa a contagem de falhas do IP
@@ -426,7 +426,7 @@ def doar_pagamento():
 
             if result['status'] == 'success':
                 # Em um app real, aqui você registraria a transação pendente no BD.
-                logger.info(f"PIX gerado por User ID: {user_id}. Valor: {amount:.2f}. TX ID: {result['tx_id']}")
+                logger.info(f"PIX gerado por User ID: {user_id}. Valor: {format(amount, '.2f')}. TX ID: {result['tx_id']}")
                 flash(f"PIX gerado com sucesso! Use o código/QR Code para pagar. (ID: {result['tx_id']})", "success")
             else:
                 logger.error(f"Erro ao gerar PIX para User ID: {user_id}. Erro: {result['message']}")
@@ -458,8 +458,9 @@ def doar_pagamento():
                     db.session.add(nova)
                     db.session.commit()
                     
-                    logger.info(f"Doação com cartão aprovada e registrada. User ID: {user_id}. Valor: R$ {amount:.2f}. TX ID: {result['tx_id']}")
-                    flash(f"Doação com cartão de R$ {amount:.2f} aprovada e registrada! Obrigado.", "success")
+                    amt_str = format(amount, '.2f')
+                    logger.info(f"Doação com cartão aprovada e registrada. User ID: {user_id}. Valor: R$ {amt_str}. TX ID: {result['tx_id']}")
+                    flash(f"Doação com cartão de R$ {amt_str} aprovada e registrada! Obrigado.", "success")
                 except Exception as e:
                     db.session.rollback()
                     logger.critical(f"Falha CRÍTICA ao salvar doação financeira após aprovação! User ID: {user_id}. Erro: {e}")
@@ -476,7 +477,7 @@ def doar_pagamento():
             return redirect(url_for('doar_pagamento'))
 
 
-    return render_template('pagamento.html', user_role=getattr(current_user, 'role', 'Convidado'))
+    return render_template('pagamentos.html', user_role=getattr(current_user, 'role', 'Convidado'))
 # FIM DA ROTA DE PAGAMENTO ##
 
 
