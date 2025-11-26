@@ -80,7 +80,7 @@ db = SQLAlchemy(app)
 bcrypt = Bcrypt(app) # Inicializa o Bcrypt para hashing seguro de senhas (A02)
 csrf = CSRFProtect(app)  # Proteção CSRF para formulários
 sess = Session(app)  # Server-side session support
-limiter = Limiter(app, key_func=get_remote_address)  # Rate limiting
+limiter = Limiter(key_func=get_remote_address)  # Rate limiting
 force_https = os.getenv('FORCE_HTTPS', 'false').lower() == 'true'
 Talisman(app, content_security_policy={
     'default-src': ["'self'"],
@@ -91,8 +91,8 @@ Talisman(app, content_security_policy={
 # Login manager
 # Flask-Login setup
 login_manager = LoginManager()
-login_manager.login_view = 'login'
 login_manager.init_app(app)
+login_manager.login_view = 'login'  # type: ignore[attr-defined]
 
 
 @login_manager.user_loader
