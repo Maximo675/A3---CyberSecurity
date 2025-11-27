@@ -1,28 +1,13 @@
-Sistema de Gerenciamento de Doações
+Este projeto foi desenvolvido para a disciplina de Segurança e Sitemas Computacionais, como avaliação da A3.
+O sistema implementa um Gerenciador de Doações com login seguro, diferentes níveis de acesso e módulo de pagamento simulado (PIX e Cartão).
 
-Este repositório contém o projeto desenvolvido para a disciplina de Segurança e Sistemas Operacionais.
-O objetivo é implementar um sistema simples de gerenciamento de doações utilizando Flask, SQLite e boas práticas de segurança.
+A aplicação foi construída utilizando:
 
-Funcionalidades:
-
-- Sistema de login (admin e voluntário)
-- Cadastro de voluntários (somente admin)
-- Registro de doações (somente voluntário)
-- Listagem das doações registradas
-- Controle de sessão com Flask
-- Hash seguro de senhas (bcrypt)
-- Validação de dados e prevenção de erros comuns
-- Registro de logs de segurança
-
-Tecnologias Utilizadas:
-
-- Python 3
-- Flask
-- Flask-Bcrypt
-- Flask-SQLAlchemy
+- Python + Flask
+- HTML + Bootstrap
 - SQLite
-- HTML / Jinja2 / Bootstrap
 
+<<<<<<< HEAD
 Como executar o projeto (modo seguro):
 
 1. Crie um ambiente virtual e instale as dependências:
@@ -89,22 +74,43 @@ Run tests locally with pytest (from project root, with venv active):
 
 The CI pipeline (`.github/workflows/ci.yml`) runs `pip-audit`, `bandit`, and `pytest` for each push and PR to `main`.
 Estrutura do Projeto
+=======
+Boas práticas de segurança:
 
-/instance
-  └── doacoes_app.db       # Banco de dados
+- Hash de senha (bcrypt)
+- Controle de sessão
+- Controle de acesso por função (admin/voluntário)
+- Validações de entrada (OWASP A03)
+- Proteção contra endpoint overrides (A04)
+- Logging centralizado (A09)
+- Separação de templates e instância do banco
 
-/templates
-  ├── base.html
-  ├── index.html
-  ├── login.html
-  ├── nova_doacao.html
-  └── register_voluntario.html
+Funcionalidades Principais
 
-app.py                      # Arquivo principal
-security.log                # Logs de segurança
+Autenticação:
 
-*Observação
+- Login com validação segura
+- Logout
+- Senhas armazenadas com hash bcrypt
+- Controle de tentativas inválidas
+>>>>>>> cda3a807b2b4935d14ac6d647479cf4c5d983c88
 
+Controle de Acesso:
+
+Admin:
+- Acessa todas as funções
+- Cadastra novos voluntários
+- Visualiza todas as doações
+
+Voluntário:
+- Registra novas doações
+- Visualiza doações
+- Acessa módulo de pagamento
+
+Gerenciamento de Doações
+- Registrar novo item doado
+
+<<<<<<< HEAD
 Este projeto foi desenvolvido exclusivamente para fins acadêmicos, com foco em princípios de segurança, não sendo recomendado para uso em produção sem ajustes adicionais.
 
 PIX Sandbox e Testes de Pagamento
@@ -126,3 +132,100 @@ Payload JSON esperado: {"tx_id": "<tx-id>", "status": "confirmed"}
 O endpoint verifica opcionalmente o header `X-WEBHOOK-SECRET` (configure a variável de ambiente `PAYMENT_WEBHOOK_SECRET` em produção) para validar a origem da requisição.
 
 Importante: Em ambientes de produção, substitua completamente o módulo `pagamentos.py` por integrações com um gateway de pagamentos real e NUNCA armazene dados sensíveis do cartão em texto puro.
+=======
+Campos:
+- Tipo
+- Quantidade
+- Responsável (automático pelo login)
+
+Listagem com:
+- ID
+- Tipo
+- Quantidade
+- Registrado por
+
+Módulo de Pagamento (Simulado)
+
+Inclui dois fluxos:
+- PIX (simulado)
+Gera:
+- TxID
+- QR Code (fake)
+- Mensagem de sucesso
+
+Cartão (simulado)
+- Validação mínima
+Gera:
+- TxID
+- Status aprovado / erro simulado
+
+Importante: Nenhum dado real de cartão é armazenado.
+
+Interface
+
+- Baseada em Bootstrap
+- Navbar adaptável (mobile)
+- Layout padronizado em base.html
+
+Templates:
+- index
+- login
+- registro de voluntário
+- nova doação
+- pagamento
+
+Estrutura de Pastas
+
+/
+│── app.py
+│── requirements.txt
+│── security.log
+│── instance/
+│      └── doacoes_app.db
+│── templates/
+       ├── base.html
+       ├── index.html
+       ├── login.html
+       ├── nova_doacao.html
+       ├── pagamento.html
+       └── register_voluntario.html
+
+Segurança Implementada (OWASP Top 10)
+       
+| OWASP                        | Implementação                                    |
+| ---------------------------- | ------------------------------------------------ |
+| A02 – Cryptographic Failures | Hash seguro (bcrypt), .env, SECRET_KEY           |
+| A03 – Injection              | Validações, conversões seguras, sanitização      |
+| A04 – Insecure Design        | Controle de sessão por função (admin/voluntário) |
+| A09 – Logging                | Logs para logins, erros, tentativas suspeitas    |
+| Outros                       | Proteção de rotas com decorators                 |
+
+
+Como Executar o Projeto Localmente
+1 - Instale o Python
+
+2 - Instale as dependências
+
+No terminal, rode:
+pip install -r requirements.txt
+
+3 - Rode o app
+python app.py
+
+4 - Acesse no navegador:
+http://127.0.0.1:5000
+
+
+Criando o usuário administrador
+
+Antes de usar o sistema, execute:
+flask create-admin
+
+Criará:
+
+- Usuário: admin
+
+- Senha: SenhaForte123
+
+Depois você pode adicionar voluntários pelo próprio sistema.
+>>>>>>> cda3a807b2b4935d14ac6d647479cf4c5d983c88
