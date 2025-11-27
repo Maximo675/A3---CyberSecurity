@@ -11,6 +11,7 @@ from flask_bcrypt import Bcrypt
 from functools import wraps
 from sqlalchemy.exc import IntegrityError
 from flask_wtf import CSRFProtect
+from flask_migrate import Migrate
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_session import Session
@@ -19,7 +20,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from decimal import Decimal, InvalidOperation, getcontext
 import time # Já está presente
 ## NOVO: MÓDULO DE PAGAMENTO
-from pagamentos import process_pix, process_card # Importa as funções de pagamento simulado
+from pagamentos_gateway import get_gateway
 
 # ----------------------------------------------------------------------
 # 1. CONFIGURAÇÃO DE SEGURANÇA E LOGGING (A09)
@@ -81,6 +82,7 @@ bcrypt = Bcrypt(app) # Inicializa o Bcrypt para hashing seguro de senhas (A02)
 csrf = CSRFProtect(app)  # Proteção CSRF para formulários
 sess = Session(app)  # Server-side session support
 limiter = Limiter(key_func=get_remote_address)  # Rate limiting
+migrate = Migrate(app, db)
 force_https = os.getenv('FORCE_HTTPS', 'false').lower() == 'true'
 Talisman(app, content_security_policy={
     'default-src': ["'self'"],
@@ -161,6 +163,21 @@ class Doacao(db.Model):
 
     def __repr__(self):
         return f'<Doacao {self.tipo}>'
+
+
+class Transaction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    tx_id = db.Column(db.String(64), unique=True, nullable=False)
+    method = db.Column(db.String(20), nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    payer_id = db.Column(db.String(120), nullable=True)
+    status = db.Column(db.String(20), nullable=False, default='pending')
+    qr_code = db.Column(db.Text, nullable=True)  # base64 image or text
+    created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.now())
+
+    def __repr__(self):
+        return f'<Transaction {self.tx_id} {self.status}>'
 
 # Cria o banco de dados e as tabelas (Execute isso após rodar as instalações!)
 with app.app_context():
@@ -418,21 +435,40 @@ def doar_pagamento():
             flash("Valor de doação inválido. Insira um valor positivo.", "danger")
             return redirect(url_for('doar_pagamento'))
 
+        # Inicializa o gateway após validação
+        gateway = get_gateway()
+
         if method == 'pix':
             payer_id = request.form.get('payer_id', f"User_{user_id}")
             
             # Chama a função simulada de pagamento PIX
-            result = process_pix(amount, payer_id)
+            result = gateway.create_pix(amount, payer_id)
 
             if result['status'] == 'success':
-                # Em um app real, aqui você registraria a transação pendente no BD.
-                logger.info(f"PIX gerado por User ID: {user_id}. Valor: {format(amount, '.2f')}. TX ID: {result['tx_id']}")
-                flash(f"PIX gerado com sucesso! Use o código/QR Code para pagar. (ID: {result['tx_id']})", "success")
+                # Registra a transação pendente no BD com o QR Code (base64)
+                try:
+                    tx = Transaction()
+                    tx.tx_id = result['tx_id']
+                    tx.method = 'pix'
+                    tx.amount = amount
+                    tx.user_id = user_id
+                    tx.payer_id = payer_id
+                    tx.status = 'pending'
+                    tx.qr_code = result.get('qr_code')
+                    db.session.add(tx)
+                    db.session.commit()
+                    logger.info(f"PIX gerado e transação registrada. User ID: {user_id}. Valor: {format(amount, '.2f')}. TX ID: {result['tx_id']}")
+                    # Redireciona para a visão da transação, que renderiza o QR
+                    return redirect(url_for('transaction_view', tx_id=result['tx_id']))
+                except Exception as e:
+                    db.session.rollback()
+                    logger.critical(f"Falha ao registrar transação PIX! User ID: {user_id}. Erro: {e}")
+                    flash("Erro interno ao processar transação. Tente novamente mais tarde.", "danger")
+                    return redirect(url_for('doar_pagamento'))
             else:
                 logger.error(f"Erro ao gerar PIX para User ID: {user_id}. Erro: {result['message']}")
                 flash(f"Erro ao gerar PIX: {result['message']}", "danger")
-            
-            return redirect(url_for('doar_pagamento'))
+                return redirect(url_for('doar_pagamento'))
 
         elif method == 'card':
             # Captura os dados do cartão (NÃO SEGURO em produção real)
@@ -445,7 +481,7 @@ def doar_pagamento():
             # Mask PAN for logging. Never log full card numbers or CVV in production.
             masked_pan = (card_number[-4:].rjust(len(card_number), '*')) if card_number else None
             logger.info(f"Iniciando processamento de cartão para User ID: {user_id}. PAN (masked): {masked_pan}")
-            result = process_card(amount, card_number, card_holder, expiry, cvv)
+            result = gateway.charge_card(amount, card_number, card_holder, expiry, cvv)
 
             if result['status'] == 'success':
                 # REGISTRO FINAL DA DOAÇÃO COMO ITEM (Simplificado para o modelo existente)
@@ -478,6 +514,72 @@ def doar_pagamento():
 
 
     return render_template('pagamentos.html', user_role=getattr(current_user, 'role', 'Convidado'))
+
+@app.route('/transaction/<tx_id>', methods=['GET'])
+@login_required
+def transaction_view(tx_id):
+    tx = Transaction.query.filter_by(tx_id=tx_id).first()
+    if not tx:
+        flash('Transação não encontrada.', 'warning')
+        return redirect(url_for('doar_pagamento'))
+
+    amount_str = format(tx.amount, '.2f') if tx.amount is not None else '0.00'
+    return render_template('transaction.html', tx=tx, amount_str=amount_str, user_role=getattr(current_user, 'role', 'Convidado'))
+
+
+@app.route('/transactions', methods=['GET'])
+@login_required
+def transactions():
+    # Show current user's recent transactions
+    user_id = current_user.get_id()
+    txs = Transaction.query.filter_by(user_id=user_id).order_by(Transaction.created_at.desc()).limit(20).all()
+    return render_template('transactions.html', txs=txs, user_role=getattr(current_user, 'role', 'Convidado'))
+
+
+@app.route('/webhook/payment', methods=['POST'])
+@csrf.exempt
+def payment_webhook():
+    # Rota para receber confirmações de pagamento do gateway (e.g., PIX confirmado)
+    # Webhook payload verification
+    # Priority: prefer signature check (HMAC SHA256) via 'X-GATEWAY-SIGNATURE' or fallback to shared header secret 'X-WEBHOOK-SECRET'.
+    signature_header = request.headers.get('X-GATEWAY-SIGNATURE')
+    header_secret = request.headers.get('X-WEBHOOK-SECRET')
+    secret = os.getenv('PAYMENT_WEBHOOK_SECRET') or os.getenv('GATEWAY_API_SECRET')
+
+    if signature_header:
+        # signature expected as hex string of HMAC SHA256
+        from pagamentos_gateway import verify_hmac_signature
+        if not verify_hmac_signature(request.get_data(), signature_header, secret or ''):
+            logger.warning('Webhook chamada com assinatura inválida.')
+            return {'status': 'forbidden'}, 403
+    elif secret:
+        # legacy: header secret verification
+        if header_secret != secret:
+            logger.warning('Webhook chamada com segredo inválido (header mismatch).')
+            return {'status': 'forbidden'}, 403
+
+    data = request.get_json() or {}
+    tx_id = data.get('tx_id')
+    status = data.get('status')
+
+    if not tx_id or not status:
+        logger.warning('Webhook chamada com payload incompleto.')
+        return {'status': 'bad_request', 'message': 'tx_id and status are required'}, 400
+
+    tx = Transaction.query.filter_by(tx_id=tx_id).first()
+    if not tx:
+        logger.warning(f'Webhook: transação não encontrada. tx_id={tx_id}')
+        return {'status': 'not_found'}, 404
+
+    # Atualiza o status somente para estados conhecidos
+    if status not in ['pending', 'confirmed', 'failed']:
+        logger.warning(f'Webhook: status inválido recebido: {status}')
+        return {'status': 'bad_request', 'message': 'status inválido'}, 400
+
+    tx.status = status
+    db.session.commit()
+    logger.info(f'Transação tx_id={tx_id} atualizada via webhook para status={status}')
+    return {'status': 'ok'}
 # FIM DA ROTA DE PAGAMENTO ##
 
 

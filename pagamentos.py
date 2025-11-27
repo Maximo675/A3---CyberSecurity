@@ -2,6 +2,9 @@
 
 import uuid
 import time
+import io
+import base64
+import qrcode
 
 def process_pix(amount, payer_id=None):
     """
@@ -17,7 +20,18 @@ def process_pix(amount, payer_id=None):
         
     tx_id = str(uuid.uuid4())
     # Em uma implementação real, esta seria a chave PIX ou URL para o QR Code.
-    qr_code = f"PIX_SIMULADO://{tx_id}" 
+    # Geramos um QR Code PNG e retornamos como base64 para ser exibido em uma página.
+    qr_payload = f"PIX:{tx_id}|AMOUNT:{amount}|PAYER:{payer_id}"
+    qr = qrcode.QRCode(box_size=10, border=4)
+    qr.add_data(qr_payload)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    buffered = io.BytesIO()
+    img.save(buffered, format="PNG")
+    img_bytes = buffered.getvalue()
+    qr_b64 = base64.b64encode(img_bytes).decode('ascii')
+    qr_code = f"data:image/png;base64,{qr_b64}"
 
     # Simular processamento
     time.sleep(0.1)
