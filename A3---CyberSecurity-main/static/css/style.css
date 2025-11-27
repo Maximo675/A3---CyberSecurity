@@ -1,0 +1,40 @@
+/* Custom styles for Amigos Peludos - warm, modern look */
+
+:root{
+  --brand: #2a9d8f;
+  --accent: #e9f5f2;
+  --muted: #6c757d;
+}
+
+body{
+  background: linear-gradient(180deg, #f8fbfa 0%, #ffffff 100%);
+  color: #222;
+}
+
+.brand-logo{font-size:1.6rem}
+
+.hero{
+  background: linear-gradient(135deg, rgba(42,157,143,0.06), rgba(42,157,143,0.02));
+  border-radius: 12px;
+  padding: 2.25rem;
+}
+
+.hero .display-5{color: #114b44}
+
+.card{border: none}
+
+.btn-primary{background: var(--brand); border-color: var(--brand)}
+.btn-primary:hover{background:#228b7b}
+
+.btn-outline-primary{border-color: var(--brand); color:var(--brand)}
+
+.shadow-sm{box-shadow: 0 6px 18px rgba(12,40,37,0.05)}
+
+/* small responsiveness tweaks */
+@media (max-width: 768px){
+  .hero{padding:1.5rem}
+}
+
+.footer-note{opacity:0.9}
+
+.rounded-3{border-radius:12px}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Sistema de Doações{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="h4 mb-3">Login</h2>
+
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Usuário</label>
+                        <input type="text" class="form-control" id="username"
+                               name="username" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Senha</label>
+                        <input type="password" class="form-control" id="password"
+                               name="password" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">
+                        Entrar
+                    </button>
+                </form>
+
+                <hr>
+                <p class="small text-muted mt-2">
+                    Não compartilhe credenciais em templates. Crie um usuário admin via variável de ambiente e evite credenciais padrão.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
