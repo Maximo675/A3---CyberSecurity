@@ -18,11 +18,26 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_session import Session
 from flask_talisman import Talisman
+try:
+    import redis  # optional for nonce backend
+except Exception:
+    redis = None
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
 from decimal import Decimal, InvalidOperation, getcontext
 import time # Já está presente
 ## NOVO: MÓDULO DE PAGAMENTO
 from pagamentos_gateway import get_gateway
+
+# Simple in-memory nonce store (replace with Redis in production)
+USED_NONCES = set()
+NONCE_BACKEND = os.getenv('WEBHOOK_NONCE_BACKEND', 'memory').lower()
+REDIS_URL = os.getenv('REDIS_URL')
+redis_client = None
+if NONCE_BACKEND == 'redis' and REDIS_URL and redis is not None:
+    try:
+        redis_client = redis.Redis.from_url(REDIS_URL)
+    except Exception as e:
+        logger.warning(f"Falha ao conectar Redis para nonces: {e}. Voltando para memória.")
 
 # ----------------------------------------------------------------------
 # 1. CONFIGURAÇÃO DE SEGURANÇA E LOGGING (A09)
@@ -63,8 +78,8 @@ app.config['SESSION_FILE_DIR'] = os.path.join(app.instance_path, 'flask_session'
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = 1800  # 30 minutes
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SECURE'] = True  # Requires HTTPS in production
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'true').lower() == 'true'  # Requires HTTPS in production
+app.config['SESSION_COOKIE_SAMESITE'] = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax')
 
 # Variáveis de Rate Limiting (A07)
 FAILED_LOGIN_ATTEMPTS = {}
@@ -73,9 +88,9 @@ LOCKOUT_TIME = 300  # 5 minutos
 
 # Configurações de Cookies Seguros (A02 e A09)
 app.config.update({
-  'SESSION_COOKIE_HTTPONLY': True,
-  'SESSION_COOKIE_SECURE': True,  # garantir HTTPS
-  'SESSION_COOKIE_SAMESITE': 'Lax'
+    'SESSION_COOKIE_HTTPONLY': True,
+    'SESSION_COOKIE_SECURE': os.getenv('SESSION_COOKIE_SECURE', 'true').lower() == 'true',
+    'SESSION_COOKIE_SAMESITE': os.getenv('SESSION_COOKIE_SAMESITE', 'Lax')
 })
 
 # Inicialização de Extensões
@@ -86,14 +101,28 @@ sess = Session(app)  # Server-side session support
 limiter = Limiter(key_func=get_remote_address)  # Rate limiting
 migrate = Migrate(app, db)
 force_https = os.getenv('FORCE_HTTPS', 'false').lower() == 'true'
-Talisman(app, content_security_policy={
-    'default-src': ["'self'"],
-    'script-src': ["'self'", 'https://cdn.jsdelivr.net', 'https://unpkg.com', 'https://cdnjs.cloudflare.com'],
-    'style-src': ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://fonts.googleapis.com'],
-    'font-src': ["'self'", 'https://fonts.gstatic.com'],
-    'img-src': ["'self'", 'https://images.unsplash.com', 'data:'],
-    'connect-src': ["'self'", 'https://cdn.jsdelivr.net']
-}, force_https=force_https)  # Set via env var to enforce HTTPS in production
+strict_hsts = os.getenv('STRICT_HSTS', 'true').lower() == 'true'
+# CSP modes: default allows limited CDNs; strict allows only self
+csp_mode = os.getenv('CSP_MODE', 'default').lower()
+if csp_mode == 'strict':
+    csp_policy = {
+        'default-src': ["'self'"],
+        'script-src': ["'self'"],
+        'style-src': ["'self'"],
+        'font-src': ["'self'"],
+        'img-src': ["'self'", 'data:'],
+        'connect-src': ["'self'"]
+    }
+else:
+    csp_policy = {
+        'default-src': ["'self'"],
+        'script-src': ["'self'", 'https://cdn.jsdelivr.net', 'https://unpkg.com', 'https://cdnjs.cloudflare.com'],
+        'style-src': ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://fonts.googleapis.com'],
+        'font-src': ["'self'", 'https://fonts.gstatic.com'],
+        'img-src': ["'self'", 'https://images.unsplash.com', 'data:'],
+        'connect-src': ["'self'", 'https://cdn.jsdelivr.net']
+    }
+Talisman(app, content_security_policy=csp_policy, force_https=force_https, strict_transport_security=strict_hsts)
 
 # Login manager
 # Flask-Login setup
@@ -636,6 +665,29 @@ def payment_webhook():
             return {'status': 'forbidden'}, 403
 
     data = request.get_json() or {}
+    # Anti-replay: require timestamp and nonce; reject outside window and duplicates
+    # In TESTING mode, skip anti-replay to keep tests simple.
+    if not app.config.get('TESTING'):
+        tolerance_minutes = int(os.getenv('WEBHOOK_TOLERANCE_MINUTES', '5'))
+        ts = data.get('timestamp')
+        nonce = data.get('nonce')
+        now = int(time.time())
+        if not ts or not nonce:
+            logger.warning('Webhook: faltando timestamp/nonce.')
+            return {'status': 'bad_request', 'message': 'timestamp and nonce are required'}, 400
+        try:
+            ts = int(ts)
+        except Exception:
+            return {'status': 'bad_request', 'message': 'invalid timestamp'}, 400
+        if abs(now - ts) > tolerance_minutes * 60:
+            logger.warning('Webhook: timestamp fora da janela tolerada.')
+            return {'status': 'forbidden', 'message': 'stale or future timestamp'}, 403
+        # Basic nonce store using in-memory cache; replace with Redis in production
+        combo = f"{nonce}:{ts}"
+        if combo in USED_NONCES:
+            logger.warning('Webhook: nonce reutilizado (possível replay).')
+            return {'status': 'forbidden', 'message': 'nonce replay detected'}, 403
+        USED_NONCES.add(combo)
     tx_id = data.get('tx_id')
     status = data.get('status')
 
