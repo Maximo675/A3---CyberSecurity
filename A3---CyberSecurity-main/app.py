@@ -610,6 +610,12 @@ def payment_webhook():
     signature_header = request.headers.get('X-GATEWAY-SIGNATURE')
     header_secret = request.headers.get('X-WEBHOOK-SECRET')
     secret = os.getenv('PAYMENT_WEBHOOK_SECRET') or os.getenv('GATEWAY_API_SECRET')
+    allow_unsigned = os.getenv('ALLOW_UNSIGNED_WEBHOOKS', 'false').lower() == 'true'
+
+    # Reject unsigned requests unless explicitly allowed to accept them (dev only)
+    if not signature_header and not secret and not allow_unsigned:
+        logger.warning('Webhook chamada sem assinatura e sem segredo configurado. Rejeitando.')
+        return {'status': 'forbidden'}, 403
 
     if signature_header:
         # signature expected as hex string of HMAC SHA256
