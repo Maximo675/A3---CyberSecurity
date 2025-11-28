@@ -114,26 +114,8 @@ Run tests locally with pytest (from project root, with venv active):
 
 The CI pipeline (`.github/workflows/ci.yml`) runs `pip-audit`, `bandit`, and `pytest` for each push and PR to `main`.
 Estrutura do Projeto
-=======
-Boas práticas de segurança:
 
-- Hash de senha (bcrypt)
-- Controle de sessão
-- Controle de acesso por função (admin/voluntário)
-- Validações de entrada (OWASP A03)
-- Proteção contra endpoint overrides (A04)
-- Logging centralizado (A09)
-- Separação de templates e instância do banco
 
-Funcionalidades Principais
-
-Autenticação:
-
-- Login com validação segura
-- Logout
-- Senhas armazenadas com hash bcrypt
-- Controle de tentativas inválidas
->>>>>>> cda3a807b2b4935d14ac6d647479cf4c5d983c88
 
 Controle de Acesso:
 
@@ -150,7 +132,7 @@ Voluntário:
 Gerenciamento de Doações
 - Registrar novo item doado
 
-<<<<<<< HEAD
+
 Este projeto foi desenvolvido exclusivamente para fins acadêmicos, com foco em princípios de segurança, não sendo recomendado para uso em produção sem ajustes adicionais.
 
 PIX Sandbox e Testes de Pagamento
@@ -241,31 +223,5 @@ Segurança Implementada (OWASP Top 10)
 | Outros                       | Proteção de rotas com decorators                 |
 
 
-Como Executar o Projeto Localmente
-1 - Instale o Python
-
-2 - Instale as dependências
-
-No terminal, rode:
-pip install -r requirements.txt
-
-3 - Rode o app
-python app.py
-
-4 - Acesse no navegador:
-http://127.0.0.1:5000
 
 
-Criando o usuário administrador
-
-Antes de usar o sistema, execute:
-flask create-admin
-
-Criará:
-
-- Usuário: admin
-
-- Senha: SenhaForte123
-
-Depois você pode adicionar voluntários pelo próprio sistema.
->>>>>>> cda3a807b2b4935d14ac6d647479cf4c5d983c88

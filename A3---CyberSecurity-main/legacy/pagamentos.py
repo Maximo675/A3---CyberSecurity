@@ -3,6 +3,12 @@
 Arquivo de pagamentos legado (archive). A aplicação usa `pagamentos_gateway.py` como o adaptador canônico.
 Este arquivo foi movido para `legacy/` com uma cópia preservada.
 """
+import uuid
+import qrcode
+import io
+import base64
+import time
+
 def _archived_notice():
     return {"status": "archived", "message": "Use pagamentos_gateway.py"}
 
@@ -28,7 +34,7 @@ def process_pix(amount, payer_id=None):
     img = qr.make_image(fill_color="black", back_color="white")
 
     buffered = io.BytesIO()
-    img.save(buffered, format="PNG")
+    img.save(buffered, "PNG")
     img_bytes = buffered.getvalue()
     qr_b64 = base64.b64encode(img_bytes).decode('ascii')
     qr_code = f"data:image/png;base64,{qr_b64}"
