@@ -1,8 +1,10 @@
 """
-Módulo de pagamentos (exemplo).
-Contém funções simples para demonstrar integração de pagamentos via PIX e cartão.
-Estas implementações são placeholders — substitua pela integração real com gateway.
+payments.py (ARCHIVED)
+Arquivo legado: spare copy for reference; pagamentos_gateway.py is used by the application.
 """
+
+def _archived_notice():
+    return {"status": "archived", "message": "Use pagamentos_gateway.py"}
 
 import uuid
 import time
@@ -18,14 +20,7 @@ def process_pix(amount, payer_id=None):
     # Simular processamento
     time.sleep(0.1)
 
-    return {
-        "status": "success",
-        "method": "pix",
-        "tx_id": tx_id,
-        "amount": amount,
-        "qr_code": qr_code,
-        "message": "Pagamento via PIX gerado com sucesso (simulado)."
-    }
+    return _archived_notice()
 
 def process_card(amount, card_number, card_holder, expiry, cvv):
     """
@@ -44,14 +39,7 @@ def process_card(amount, card_number, card_holder, expiry, cvv):
     # Simulando processamento
     time.sleep(0.1)
 
-    return {
-        "status": "success",
-        "method": "card",
-        "tx_id": tx_id,
-        "amount": amount,
-        "card_holder": card_holder,
-        "message": "Pagamento com cartão aprovado (simulado)."
-    }
+    return _archived_notice()
 
 if __name__ == "__main__":
     print(process_pix(10.00))

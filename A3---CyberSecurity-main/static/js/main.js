@@ -20,10 +20,15 @@ document.addEventListener('DOMContentLoaded', function () {
         try {
           // read tx id from data attribute
           const txId = simBtn.dataset && simBtn.dataset.txId ? simBtn.dataset.txId : (document.querySelector('[data-tx-id]')?.getAttribute('data-tx-id'));
-          const resp = await fetch('/webhook/payment', {
+          // CSRF token
+          const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+          const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+          const endpoint = `/simulate_payment/${encodeURIComponent(txId)}`;
+          const resp = await fetch(endpoint, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tx_id: txId, status: 'confirmed' })
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ status: 'confirmed' }),
+            credentials: 'same-origin'
           });
           if (resp.ok) {
             window.location.reload();

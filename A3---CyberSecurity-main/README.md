@@ -1,3 +1,43 @@
+# A3 - Gerenciador de Doações (Projeto ACADEMICO)
+
+Resumo:
+- Projeto desenvolvido para fins educacionais (A3: Segurança de Sistemas).
+- Implementa autenticação, roles (admin/voluntario), CRUD de doações e uma camada de pagamento simulada (PIX/cartão).
+
+Requisitos Rápidos:
+- Python 3.10+ (recomendado 3.11+)
+- Instale dependências em um ambiente virtual: `python -m venv .venv` + `pip install -r requirements.txt`
+
+Como rodar (local / dev):
+1) Ative o ambiente virtual (Windows PowerShell):
+```
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+2) Configure variáveis de ambiente (ex.: `SECRET_KEY`, `ADMIN_PASS`) — veja `.env.example`.
+3) Crie o admin: `flask create-admin` (requer `ADMIN_PASS`)
+4) Rode o app: `python app.py` (ou `FLASK_DEBUG=true python app.py` para dev)
+
+Arquitetura e organização:
+- `app.py` - Aplicação Flask principal
+- `templates/` - Templates Jinja2 canônicos
+- `static/` - CSS/JS/Assets
+- `pagamentos_gateway.py` - Adapter de gateway (Sandbox + stubs para provedores)
+- `legacy/` - Arquivos duplicados / versões antigas preservadas (arquivados)
+
+Observações de segurança e manutenção:
+- Não comite ambientes virtuais (`venv/`, `.venv/`) - já listados em `.gitignore`.
+- Não armazene segredos no repositório; use `.env` e ferramentas de segredo para produção.
+- Em produção use WSGI (gunicorn/uwsgi), HTTPS e um banco real; trate dados de cartão via tokenizador de um provedor confiável.
+
+Testes e CI:
+- Rodar testes locais: `python -m pytest -q` (com venv ativo).
+- CI executa bandit, pip-audit e pytest para validação.
+
+Se você deseja que eu consolide os arquivos duplicados automaticamente (mover para `legacy/`, atualizar `.gitignore`, remover `venv/` do controle de versão), diga "Sim" e eu aplico as mudanças seguras no repositório.
+
+Obrigado — vamos limpar e melhorar a base do projeto passo a passo.
 Este projeto foi desenvolvido para a disciplina de Segurança e Sitemas Computacionais, como avaliação da A3.
 O sistema implementa um Gerenciador de Doações com login seguro, diferentes níveis de acesso e módulo de pagamento simulado (PIX e Cartão).
 

@@ -1,10 +1,10 @@
-# pagamentos.py
-
-import uuid
-import time
-import io
-import base64
-import qrcode
+# pagamentos.py (ARCHIVED - see pagamentos_gateway.py)
+"""
+Arquivo de pagamentos legado (archive). A aplicação usa `pagamentos_gateway.py` como o adaptador canônico.
+Este arquivo foi movido para `legacy/` com uma cópia preservada.
+"""
+def _archived_notice():
+    return {"status": "archived", "message": "Use pagamentos_gateway.py"}
 
 def process_pix(amount, payer_id=None):
     """
@@ -36,14 +36,8 @@ def process_pix(amount, payer_id=None):
     # Simular processamento
     time.sleep(0.1)
 
-    return {
-        "status": "success",
-        "method": "pix",
-        "tx_id": tx_id,
-        "amount": amount,
-        "qr_code": qr_code,
-        "message": "Pagamento via PIX gerado com sucesso (simulado). Aguardando confirmação."
-    }
+    # This implementation is archived. Use pagamentos_gateway.SandboxGateway.create_pix instead.
+    return _archived_notice()
 
 def process_card(amount, card_number, card_holder, expiry, cvv):
     """
@@ -77,13 +71,8 @@ def process_card(amount, card_number, card_holder, expiry, cvv):
 
     # Nota: Em um ambiente real, a bandeira do cartão não seria retornada, 
     # mas sim um token seguro e o status de aprovação.
-    return {
-        "status": "success",
-        "method": "card",
-        "tx_id": tx_id,
-        "amount": amount,
-        "message": "Pagamento com cartão aprovado (simulado)."
-    }
+    # This implementation is archived; use pagamentos_gateway.SandboxGateway.charge_card instead.
+    return _archived_notice()
 
 if __name__ == "__main__":
     print(process_pix(10.00))

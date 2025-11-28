@@ -6,6 +6,8 @@ from flask import (
     Flask, request, redirect, url_for, session,
     render_template, flash
 )
+import hmac
+import hashlib
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from functools import wraps
@@ -86,10 +88,11 @@ migrate = Migrate(app, db)
 force_https = os.getenv('FORCE_HTTPS', 'false').lower() == 'true'
 Talisman(app, content_security_policy={
     'default-src': ["'self'"],
-    'script-src': ["'self'", 'https://cdn.jsdelivr.net', 'https://unpkg.com'],
-    'style-src': ["'self'", 'https://cdn.jsdelivr.net', 'https://fonts.googleapis.com'],
+    'script-src': ["'self'", 'https://cdn.jsdelivr.net', 'https://unpkg.com', 'https://cdnjs.cloudflare.com'],
+    'style-src': ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://fonts.googleapis.com'],
     'font-src': ["'self'", 'https://fonts.gstatic.com'],
     'img-src': ["'self'", 'https://images.unsplash.com', 'data:'],
+    'connect-src': ["'self'", 'https://cdn.jsdelivr.net']
 }, force_https=force_https)  # Set via env var to enforce HTTPS in production
 
 # Login manager
@@ -104,6 +107,44 @@ def load_user(user_id):
     if user_id is None:
         return None
     return User.query.get(int(user_id))
+
+
+# Utility helpers for logging obfuscation (avoid logging direct PII or IPs)
+def _get_salt():
+    # Use SECRET_KEY as HMAC salt if available; not safe to commit real secrets
+    return app.config.get('SECRET_KEY') or os.getenv('SECRET_KEY', 'dev_key')
+
+def hmac_hash(value: str, length: int = 10) -> str:
+    try:
+        key = _get_salt().encode('utf-8')
+        return hmac.new(key, str(value).encode('utf-8'), hashlib.sha256).hexdigest()[:length]
+    except Exception:
+        return 'hash_err'
+
+def mask_ip(ip: str) -> str:
+    if not ip:
+        return ''
+    # IPv4 mask last octet -> 192.0.2.xxx
+    if '.' in ip:
+        parts = ip.split('.')
+        if len(parts) == 4:
+            return '.'.join(parts[:3] + ['xxx'])
+        return ip
+    # Basic IPv6 handling: mask last group
+    if ':' in ip:
+        parts = ip.split(':')
+        return ':'.join(parts[:len(parts)-1] + ['xxxx'])
+    return ip
+
+def sanitize_for_log(value: str, maxlen: int = 120) -> str:
+    try:
+        s = str(value)
+        s = s.replace('\n', '\\n').replace('\r', '\\r').replace('\t', ' ')
+        if len(s) > maxlen:
+            return s[:maxlen] + '...'
+        return s
+    except Exception:
+        return 'sanitize_err'
 
 
 # ----------------------------------------------------------------------
@@ -208,9 +249,10 @@ def create_admin():
             admin.role = 'admin'
             db.session.add(admin)
             db.session.commit()
-            logger.info(f"Usuário admin '{admin_username}' criado com sucesso.") # Log (A09)
+            logger.info(f"Usuário admin criado com sucesso. admin_hash={hmac_hash(admin_username)}") # Log (A09)
         else:
-            print(f"Usuário admin '{admin_username}' já existe.")
+            # Keep console prints as less sensitive information, but avoid printing raw usernames
+            print(f"Usuário admin já existe (hash={hmac_hash(admin_username)})")
 
 @app.route('/login', methods=['GET', 'POST'])
 @limiter.limit("5 per minute")
@@ -226,7 +268,7 @@ def login():
         # 1. Checa se o IP está bloqueado
         if attempts >= MAX_ATTEMPTS and current_time < lock_time + LOCKOUT_TIME:
             remaining_time = int(lock_time + LOCKOUT_TIME - current_time)
-            logger.warning(f"Acesso BLOQUEADO (A07) por rate limiting. IP: {client_ip}. Tempo restante: {remaining_time}s")
+            logger.warning(f"Acesso BLOQUEADO (A07) por rate limiting. IP: {mask_ip(client_ip or '')}. Tempo restante: {remaining_time}s")
             flash(f"Acesso bloqueado por muitas tentativas. Tente novamente em {remaining_time} segundos.", "danger")
             return redirect(url_for('login'))
         
@@ -266,7 +308,7 @@ def login():
                 attempts_left = MAX_ATTEMPTS - current_attempts
                 flash(f"Credenciais inválidas ou usuário não encontrado. Tentativas restantes: {attempts_left}", "warning")
             
-            logger.warning(f"Login MAL-SUCEDIDO. Tentativa com usuário: {username}. IP: {client_ip}") # Log (A09)
+            logger.warning(f"Login MAL-SUCEDIDO. username_hash={hmac_hash(username or 'unknown')}, IP={mask_ip(client_ip or '')}") # Log (A09)
             return redirect(url_for('login'))
             
     # Usa template (Mudança principal)
@@ -316,7 +358,7 @@ def register_voluntario():
             db.session.add(new_user)
             db.session.commit()
             
-            logger.info(f"Novo usuário criado por Admin (ID: {getattr(current_user, 'id', 'Unknown')}). Username: {username}, Role: {role}") # Log (A09)
+            logger.info(f"Novo usuário criado por Admin (ID: {getattr(current_user, 'id', 'Unknown')}). username_hash={hmac_hash(username)}, role={role}") # Log (A09)
             flash(f"Usuário {username} criado com sucesso!", "success")
             return redirect(url_for('index'))
         except IntegrityError:
@@ -369,14 +411,14 @@ def nova_doacao():
                 # Keep quantity as integer-like number if representing items
                 raise InvalidOperation
         except (InvalidOperation, ValueError):
-            logger.warning(f"Tentativa de registro de doação com quantidade inválida: {quantidade_str}") # Log (A09)
+            logger.warning(f"Tentativa de registro de doação com quantidade inválida: {sanitize_for_log(quantidade_str)}") # Log (A09)
             flash("Quantidade deve ser um número inteiro válido.", "danger")
             return redirect(url_for('nova_doacao'))
 
         # 3. VERIFICAÇÃO DE CONTEÚDO (A03: XSS Prevention)
         # Verifica se o campo 'tipo' tem um tamanho aceitável e não contém tags HTML
         if not (1 < len(tipo) < 80) or ('<' in tipo or '>' in tipo):
-            logger.warning(f"Tentativa de registro de doação com tipo suspeito: {tipo}") # Log (A09)
+            logger.warning(f"Tentativa de registro de doação com tipo suspeito: {sanitize_for_log(tipo)}") # Log (A09)
             flash("Tipo de doação inválido. Evite caracteres especiais como '<' e '>'.", "danger")
             return redirect(url_for('nova_doacao'))
 
@@ -392,7 +434,7 @@ def nova_doacao():
         db.session.add(nova)
         db.session.commit()
         
-        logger.info(f"Doação registrada por User ID: {user_id}. Tipo: {tipo}.") # Log (A09)
+        logger.info(f"Doação registrada por User ID: {user_id}. Tipo: {sanitize_for_log(tipo)}.") # Log (A09)
         flash("Doação registrada com sucesso!", "success")
         return redirect(url_for('index'))
 
@@ -428,12 +470,12 @@ def doar_pagamento():
                 if amount <= 0:
                     raise ValueError
             except InvalidOperation:
-                logger.warning(f"Tentativa de doação financeira com valor inválido por User ID: {user_id}. Valor: {amount_str}")
+                logger.warning(f"Tentativa de doação financeira com valor inválido por User ID: {user_id}. Valor: {sanitize_for_log(amount_str or '')}")
                 flash("Valor de doação inválido. Insira um valor positivo.", "danger")
                 return redirect(url_for('doar_pagamento'))
 
         except (ValueError, TypeError):
-            logger.warning(f"Tentativa de doação financeira com valor inválido por User ID: {user_id}. Valor: {amount_str}")
+            logger.warning(f"Tentativa de doação financeira com valor inválido por User ID: {user_id}. Valor: {sanitize_for_log(amount_str or '')}")
             flash("Valor de doação inválido. Insira um valor positivo.", "danger")
             return redirect(url_for('doar_pagamento'))
 
@@ -529,6 +571,27 @@ def transaction_view(tx_id):
     return render_template('transaction.html', tx=tx, amount_str=amount_str, user_role=getattr(current_user, 'role', 'Convidado'))
 
 
+@app.route('/simulate_payment/<tx_id>', methods=['POST'])
+@role_required('admin')
+def simulate_payment(tx_id):
+    """Simulate payment confirmation for a transaction. Admin only. This avoids exposing webhook secrets on client side.
+    The endpoint requires CSRF and should only be available to admin users in production.
+    """
+    try:
+        tx = Transaction.query.filter_by(tx_id=tx_id).first()
+        if not tx:
+            logger.warning(f"Simulate called for non-existing tx_id: {tx_id}")
+            return {'status': 'not_found'}, 404
+
+        tx.status = 'confirmed'
+        db.session.commit()
+        logger.info(f"Transação simulada (dev) tx_id={tx_id}, user_id={sanitize_for_log(tx.user_id)}")
+        return {'status': 'ok'}, 200
+    except Exception as e:
+        logger.critical(f"Falha ao simular pagamento para tx_id={tx_id}: {e}")
+        return {'status': 'error', 'message': 'internal error'}, 500
+
+
 @app.route('/transactions', methods=['GET'])
 @login_required
 def transactions():
@@ -589,3 +652,22 @@ if __name__ == '__main__':
     # Em produção, use debug=False; control via env
     debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
     app.run(debug=debug_mode)
+
+
+@app.errorhandler(404)
+def handle_404(e):
+    logger.info(f"404 Not Found: {request.path}")
+    return render_template('404.html'), 404
+
+
+@app.errorhandler(500)
+def handle_500(e):
+    # Log exception details with stack (server-side) but do not expose internals to client.
+    logger.exception(f"Unhandled exception while handling request: {request.path}")
+    return render_template('500.html'), 500
+
+
+@app.errorhandler(403)
+def handle_403(e):
+    logger.warning(f"403 Forbidden: {request.path} by IP: {mask_ip(request.remote_addr or '')}")
+    return render_template('403.html'), 403
