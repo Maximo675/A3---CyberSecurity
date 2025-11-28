@@ -20,6 +20,7 @@ Thumbs.db
 # Database and logs
 instance/*.db
 security.log
+reports/
 
 # Editor directories and files
 .vscode/
