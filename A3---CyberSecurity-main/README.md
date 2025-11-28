@@ -15,7 +15,9 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
-2) Configure variáveis de ambiente (ex.: `SECRET_KEY`, `ADMIN_PASS`) — veja `.env.example`.
+2) Configure variáveis de ambiente:
+   - Mais fácil: use o arquivo `.env` já incluído (dev). Edite o `SECRET_KEY` se quiser.
+   - Alternativamente, exporte via PowerShell: `$env:SECRET_KEY = 'dev-secret-valor-aleatorio'`
 3) Crie o admin: `flask create-admin` (requer `ADMIN_PASS`)
 4) Rode o app: `python app.py` (ou `FLASK_DEBUG=true python app.py` para dev)
 
@@ -30,10 +32,16 @@ Observações de segurança e manutenção:
 - Não comite ambientes virtuais (`venv/`, `.venv/`) - já listados em `.gitignore`.
 - Não armazene segredos no repositório; use `.env` e ferramentas de segredo para produção.
 - Em produção use WSGI (gunicorn/uwsgi), HTTPS e um banco real; trate dados de cartão via tokenizador de um provedor confiável.
+ - Desenvolvimento local: mantenha `FORCE_HTTPS=false`, `STRICT_HSTS=false`, `SESSION_COOKIE_SECURE=false` e acesse via `http://127.0.0.1:5000`.
+ - Produção: habilite `FORCE_HTTPS=true`, `STRICT_HSTS=true`, `SESSION_COOKIE_SECURE=true` e `CSP_MODE=strict`, com assets locais.
 
 Testes e CI:
 - Rodar testes locais: `python -m pytest -q` (com venv ativo).
 - CI executa bandit, pip-audit e pytest para validação.
+
+Perfis de ambiente:
+- Dev: arquivo `.env` incluído com defaults seguros para localhost.
+- Prod: arquivo `.env.prod.example` com valores recomendados; copie e preencha com segredos reais.
 
 Se você deseja que eu consolide os arquivos duplicados automaticamente (mover para `legacy/`, atualizar `.gitignore`, remover `venv/` do controle de versão), diga "Sim" e eu aplico as mudanças seguras no repositório.
 

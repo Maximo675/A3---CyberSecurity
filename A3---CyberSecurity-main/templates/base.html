@@ -26,8 +26,8 @@
 <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm py-3">
     <div class="container">
         <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('index') }}">
-            <span class="brand-logo">🐾</span>
-            <span class="fw-bold">Amigos Peludos</span>
+            <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="Logo" width="96" height="32" class="rounded-3" />
+            <span class="fw-bold">Amigos de Rio Bonito</span>
         </a>
 
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
@@ -36,44 +36,15 @@
             <span class="navbar-toggler-icon"></span>
         </button>
 
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav me-auto">
-                {% if current_user.is_authenticated %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('nova_doacao') }}">Nova Doação</a>
-                    </li>
-                    {% if current_user.role == 'voluntario' %}
-                        <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('doar_pagamento') }}">Doar</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('transactions') }}">Minhas Transações</a>
-                        </li>
-                    {% endif %}
-                    {% if current_user.role == 'admin' %}
-                        <li class="nav-item">
-                            <a class="nav-link" href="{{ url_for('register_voluntario') }}">Gerenciar Usuários</a>
-                        </li>
-                    {% endif %}
-                {% endif %}
-            </ul>
-            <ul class="navbar-nav ms-auto align-items-center">
-                {% if current_user.is_authenticated %}
-                    <li class="nav-item me-3">
-                        <span class="text-muted small">Logado como: <strong>{{ current_user.role }}</strong></span>
-                    </li>
-                    <li class="nav-item">
-                        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('logout') }}">Sair</a>
-                    </li>
-                {% else %}
-                    <li class="nav-item">
-                        <a class="btn btn-primary btn-sm" href="{{ url_for('login') }}">Entrar</a>
-                    </li>
-                {% endif %}
-            </ul>
+        <div class="ms-auto">
+            {% if current_user.is_authenticated %}
+                <a class="btn btn-outline-primary btn-sm" href="{{ url_for('logout') }}">Sair</a>
+            {% else %}
+                <a class="btn btn-primary btn-sm" href="{{ url_for('login') }}">Entrar</a>
+            {% endif %}
         </div>
     </div>
-    </nav>
+</nav>
 
 <main class="container mb-5">
     <!-- mensagens flash -->

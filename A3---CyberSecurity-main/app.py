@@ -17,11 +17,8 @@ from flask_migrate import Migrate
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_session import Session
+import click
 from flask_talisman import Talisman
-try:
-    import redis  # optional for nonce backend
-except Exception:
-    redis = None
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
 from decimal import Decimal, InvalidOperation, getcontext
 import time # Já está presente
@@ -30,14 +27,6 @@ from pagamentos_gateway import get_gateway
 
 # Simple in-memory nonce store (replace with Redis in production)
 USED_NONCES = set()
-NONCE_BACKEND = os.getenv('WEBHOOK_NONCE_BACKEND', 'memory').lower()
-REDIS_URL = os.getenv('REDIS_URL')
-redis_client = None
-if NONCE_BACKEND == 'redis' and REDIS_URL and redis is not None:
-    try:
-        redis_client = redis.Redis.from_url(REDIS_URL)
-    except Exception as e:
-        logger.warning(f"Falha ao conectar Redis para nonces: {e}. Voltando para memória.")
 
 # ----------------------------------------------------------------------
 # 1. CONFIGURAÇÃO DE SEGURANÇA E LOGGING (A09)
@@ -55,6 +44,17 @@ logging.basicConfig(
 )
 # Objeto logger que será usado em toda a aplicação (A09)
 logger = logging.getLogger(__name__)
+# Optional Redis nonce backend initialization (after logger is available)
+NONCE_BACKEND = os.getenv('WEBHOOK_NONCE_BACKEND', 'memory').lower()
+REDIS_URL = os.getenv('REDIS_URL')
+import importlib
+redis_client = None
+if NONCE_BACKEND == 'redis' and REDIS_URL:
+    try:
+        redis_module = importlib.import_module('redis')
+        redis_client = redis_module.Redis.from_url(REDIS_URL)
+    except Exception as e:
+        logger.warning(f"Falha ao inicializar Redis para nonces: {e}. Voltando para memória.")
 
 # 1.1 GESTÃO DE SEGREDOS (A02: Cryptographic Failures)
 load_dotenv()

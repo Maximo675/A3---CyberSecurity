@@ -38,3 +38,29 @@ body{
 .footer-note{opacity:0.9}
 
 .rounded-3{border-radius:12px}
+
+/* Rio Bonito theme enhancements (CSP-friendly, no inline styles) */
+:root{
+  --rb-green:#2a9d8f; --rb-deep:#114b44; --rb-sand:#e9c46a; --rb-clay:#e76f51; --rb-sky:#3a86ff;
+}
+.rb-btn{background:var(--rb-green);color:#041d1a;border:1px solid #0e2a26;padding:.5rem .9rem;border-radius:.6rem;text-decoration:none}
+.rb-btn:hover{filter:brightness(1.08)}
+.rb-btn-outline{background:transparent;color:#114b44;border:1px solid #2a9d8f}
+.rb-badge{color:#0e3b33;background:#e9f5f2;border:1px solid #bfe3da;padding:.2rem .5rem;border-radius:999px;font-size:.76rem}
+
+/* Layout helpers */
+.rb-section{padding:3rem 0}
+.rb-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}
+.rb-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1rem}
+.rb-card h3{margin-top:0;color:#114b44}
+
+/* Simple animations */
+.fade-in{animation:fadeIn .8s ease both}
+.slide-up{animation:slideUp .7s ease both}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+/* Table fallback if Bootstrap not present */
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{border-bottom:1px solid #e5e7eb;padding:10px;text-align:left}
+.table-hover tr:hover{background:#f7fafc}

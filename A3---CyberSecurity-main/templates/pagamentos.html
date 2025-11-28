@@ -6,7 +6,7 @@
 
 <div class="row justify-content-center">
 <div class="col-md-7">
-<div class="card shadow-sm">
+<div class="rb-card shadow-sm slide-up">
 <div class="card-header bg-primary text-white">
 <h2 class="h5 mb-0">Faça sua Doação Financeira</h2>
 </div>
@@ -54,7 +54,7 @@ Selecione o método de pagamento para completar sua doação.
                             <div class="form-text">Usado para identificar o doador.</div>
                         </div>
 
-                        <button type="submit" class="btn btn-primary w-100">
+                        <button type="submit" class="rb-btn w-100">
                             Gerar Código PIX
                         </button>
                     </form>
@@ -99,7 +99,7 @@ Selecione o método de pagamento para completar sua doação.
                             </div>
                         </div>
 
-                        <button type="submit" class="btn btn-success w-100">
+                        <button type="submit" class="rb-btn w-100">
                             Doar com Cartão
                         </button>
                     </form>
@@ -113,12 +113,6 @@ Selecione o método de pagamento para completar sua doação.
 
 </div>
 
-<style>
-/* Estilos para ícones do Bootstrap 5 (não incluídos no seu link base) */
-@import url("https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css");
-.nav-link.active {
-font-weight: bold;
-}
-</style>
+<!-- Removido import externo de ícones para compatibilidade com CSP estrita -->
 
 {% endblock %}
