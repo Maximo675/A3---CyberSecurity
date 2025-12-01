@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Aprovar Voluntários - Amigos de Rio Bonito{% endblock %}
+
+{% block content %}
+<div class="rb-card slide-up">
+    <div class="card-body">
+        <h2 class="h4 mb-4">Cadastros Pendentes de Aprovação</h2>
+        
+        {% if pending_users %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Usuário</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in pending_users %}
+                        <tr>
+                            <td>{{ user.id }}</td>
+                            <td>{{ user.username }}</td>
+                            <td><span class="rb-badge">{{ user.role }}</span></td>
+                            <td><span class="badge bg-warning">{{ user.status }}</span></td>
+                            <td>
+                                <form method="post" class="d-inline" onsubmit="return confirm('Aprovar este usuário?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                                    <input type="hidden" name="action" value="approve">
+                                    <button type="submit" class="btn btn-sm btn-success">Aprovar</button>
+                                </form>
+                                
+                                <form method="post" class="d-inline" onsubmit="return confirm('Rejeitar este usuário?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <input type="hidden" name="user_id" value="{{ user.id }}">
+                                    <input type="hidden" name="action" value="reject">
+                                    <button type="submit" class="btn btn-sm btn-danger">Rejeitar</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle me-2"></i>
+                Não há cadastros pendentes no momento.
+            </div>
+        {% endif %}
+        
+        <div class="mt-4">
+            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                Voltar ao Início
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

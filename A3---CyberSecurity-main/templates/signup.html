@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Cadastro de Voluntário - Amigos de Rio Bonito{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="rb-card slide-up">
+            <div class="card-body">
+                <h2 class="h4 mb-3">Cadastro de Novo Voluntário</h2>
+                <p class="text-muted mb-4">
+                    Crie sua conta para se tornar um voluntário. Seu cadastro será revisado por um administrador antes da aprovação.
+                </p>
+
+                <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Nome de Usuário</label>
+                        <input type="text" class="form-control" id="username"
+                               name="username" required autocomplete="username">
+                        <div class="form-text">Escolha um nome único para sua conta.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Senha</label>
+                        <input type="password" class="form-control" id="password"
+                               name="password" required minlength="8" autocomplete="new-password">
+                        <div class="form-text">Mínimo de 8 caracteres.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="confirm_password" class="form-label">Confirmar Senha</label>
+                        <input type="password" class="form-control" id="confirm_password"
+                               name="confirm_password" required minlength="8" autocomplete="new-password">
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="rb-btn">Criar Conta</button>
+                        <a href="{{ url_for('login') }}" class="btn btn-outline-secondary">
+                            Já tem uma conta? Fazer login
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

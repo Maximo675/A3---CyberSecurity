@@ -217,6 +217,7 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False) # Armazena o hash (A02)
     role = db.Column(db.String(20), nullable=False, default='voluntario') # admin, voluntario (A04)
+    status = db.Column(db.String(20), nullable=False, default='active')  # active, pending, rejected
     
     # Use back_populates so both sides are declared explicitly and visible to static checkers
     donations = db.relationship('Doacao', back_populates='registrador', lazy=True)
@@ -313,7 +314,18 @@ def login():
         user = User.query.filter_by(username=username).first()
 
         if user and check_password(user.password_hash, password):
-            # Login BEM-SUCEDIDO
+            # Check user status before allowing login
+            if user.status == 'pending':
+                flash("Seu cadastro ainda está aguardando aprovação do administrador.", "warning")
+                logger.info(f"Login bloqueado - usuário pendente. username_hash={hmac_hash(username or 'unknown')}")
+                return redirect(url_for('login'))
+            
+            if user.status == 'rejected':
+                flash("Seu cadastro foi rejeitado. Entre em contato com o administrador.", "danger")
+                logger.info(f"Login bloqueado - usuário rejeitado. username_hash={hmac_hash(username or 'unknown')}")
+                return redirect(url_for('login'))
+            
+            # Login BEM-SUCEDIDO (status = active)
             session.clear()
             login_user(user, remember=False)
             
@@ -352,6 +364,57 @@ def logout():
 
     logger.info(f"Logout realizado para o Usuário ID: {user_id}") # Log (A09)
     flash('Logout realizado com sucesso.', 'info')
+    return redirect(url_for('index'))
+
+
+@app.route('/signup', methods=['GET', 'POST'])
+@limiter.limit("3 per minute")
+def signup():
+    """Public signup route - creates pending users awaiting admin approval."""
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
+        # Validação
+        if not username or not password:
+            flash("Nome de usuário e senha são obrigatórios.", "warning")
+            return redirect(url_for('signup'))
+        
+        if len(password) < 8:
+            flash("A senha deve ter no mínimo 8 caracteres.", "warning")
+            return redirect(url_for('signup'))
+        
+        if password != confirm_password:
+            flash("As senhas não coincidem.", "warning")
+            return redirect(url_for('signup'))
+        
+        if User.query.filter_by(username=username).first():
+            flash("Nome de usuário já existe.", "danger")
+            return redirect(url_for('signup'))
+        
+        # Criar usuário com status pendente
+        hashed_password = set_password(password)
+        
+        try:
+            new_user = User()
+            new_user.username = username
+            new_user.password_hash = hashed_password
+            new_user.role = 'voluntario'
+            new_user.status = 'pending'
+            
+            db.session.add(new_user)
+            db.session.commit()
+            
+            logger.info(f"Novo cadastro pendente criado. username_hash={hmac_hash(username)}")
+            flash("Cadastro enviado com sucesso! Aguarde a aprovação do administrador.", "success")
+            return redirect(url_for('login'))
+        except IntegrityError:
+            db.session.rollback()
+            flash("Erro ao registrar: nome de usuário duplicado.", "danger")
+            return redirect(url_for('signup'))
+    
+    return render_template('signup.html')
     return redirect(url_for('index'))
 
 
@@ -398,6 +461,37 @@ def register_voluntario():
 
     # Usa template (Mudança principal)
     return render_template('register_voluntario.html', user_role=getattr(current_user, 'role', 'Convidado'))
+
+
+@app.route('/admin/pending-users', methods=['GET', 'POST'])
+@role_required('admin')
+def pending_users():
+    """Admin route to approve or reject pending user signups."""
+    if request.method == 'POST':
+        user_id = request.form.get('user_id')
+        action = request.form.get('action')  # 'approve' or 'reject'
+        
+        user = User.query.get(user_id)
+        if not user:
+            flash("Usuário não encontrado.", "danger")
+            return redirect(url_for('pending_users'))
+        
+        if action == 'approve':
+            user.status = 'active'
+            db.session.commit()
+            logger.info(f"Admin {current_user.id} aprovou usuário {user.id} (username_hash={hmac_hash(user.username)})")
+            flash(f"Usuário {user.username} aprovado com sucesso!", "success")
+        elif action == 'reject':
+            user.status = 'rejected'
+            db.session.commit()
+            logger.info(f"Admin {current_user.id} rejeitou usuário {user.id} (username_hash={hmac_hash(user.username)})")
+            flash(f"Usuário {user.username} rejeitado.", "info")
+        
+        return redirect(url_for('pending_users'))
+    
+    # GET: show pending users
+    pending = User.query.filter_by(status='pending').all()
+    return render_template('pending_users.html', pending_users=pending, user_role=getattr(current_user, 'role', 'Convidado'))
 
 
 # ----------------------------------------------------------------------

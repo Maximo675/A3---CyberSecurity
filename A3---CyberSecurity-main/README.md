@@ -10,16 +10,40 @@ Requisitos Rápidos:
 
 Como rodar (local / dev):
 1) Ative o ambiente virtual (Windows PowerShell):
-```
+```powershell
+cd C:\Users\maxim\Downloads\A3---CyberSecurity-main\A3---CyberSecurity-main
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
-2) Configure variáveis de ambiente:
-   - Mais fácil: use o arquivo `.env` já incluído (dev). Edite o `SECRET_KEY` se quiser.
-   - Alternativamente, exporte via PowerShell: `$env:SECRET_KEY = 'dev-secret-valor-aleatorio'`
-3) Crie o admin: `flask create-admin` (requer `ADMIN_PASS`)
-4) Rode o app: `python app.py` (ou `FLASK_DEBUG=true python app.py` para dev)
+2) Configure o banco de dados (primeira vez):
+```powershell
+# Criar tabelas e usuários de teste
+.\.venv\Scripts\python.exe -c "import app as appmod; app=appmod.app; db=appmod.db; User=appmod.User; bcrypt=appmod.bcrypt; app.app_context().push(); db.create_all(); u1=User(username='max', password_hash=bcrypt.generate_password_hash('rb123456').decode(), role='user'); u2=User(username='admin', password_hash=bcrypt.generate_password_hash('admin123').decode(), role='admin'); db.session.add_all([u1,u2]); db.session.commit(); print('Usuários criados: max/rb123456 (user) e admin/admin123 (admin)')"
+```
+3) Rode o servidor:
+```powershell
+$env:FLASK_DEBUG = 'true'
+python app.py
+```
+4) Acesse em: `http://127.0.0.1:5000`
+
+**Credenciais de teste:**
+- Usuário: `max` / Senha: `rb123456` (role: user)
+- Usuário: `admin` / Senha: `admin123` (role: admin)
+
+## Cadastro de Novos Voluntários
+
+O sistema agora permite que novos voluntários se cadastrem diretamente, sem necessidade do admin criar manualmente:
+
+1. **Auto-cadastro**: Na página de login, clique em "Criar Conta de Voluntário"
+2. **Aprovação**: O cadastro fica com status `pending` até que um administrador aprove
+3. **Painel Admin**: Administradores veem o botão "Aprovar Cadastros" no menu para revisar e aprovar/rejeitar
+4. **Login**: Apenas usuários com status `active` conseguem fazer login
+
+**Fluxo de aprovação:**
+- Novos cadastros → Status `pending` → Admin aprova → Status `active` → Usuário pode fazer login
+- Admin pode rejeitar cadastros → Status `rejected` → Usuário não pode fazer login
 
 Arquitetura e organização:
 - `app.py` - Aplicação Flask principal
