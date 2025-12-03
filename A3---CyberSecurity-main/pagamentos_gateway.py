@@ -39,7 +39,7 @@ class SandboxGateway(BaseGateway):
         img = qr.make_image(fill_color="black", back_color="white")
 
         buffered = io.BytesIO()
-        img.save(buffered, format="PNG")
+        img.save(buffered, "PNG")
         img_bytes = buffered.getvalue()
         qr_b64 = base64.b64encode(img_bytes).decode('ascii')
         qr_code = f"data:image/png;base64,{qr_b64}"
@@ -70,9 +70,9 @@ class SandboxGateway(BaseGateway):
 
 
 # Simple factory to select gateway by env var or default to sandbox
-def get_gateway(name: str = None) -> BaseGateway:
+def get_gateway(name: str | None = None) -> BaseGateway:
     # Select gateway by environment variable or function argument.
-    name = name or None
+    name = name or 'sandbox'
     # If environment-based selection is needed, import os to read GATEWAY_PROVIDER.
     import os
     provider = name or os.getenv('GATEWAY_PROVIDER', 'sandbox').lower()

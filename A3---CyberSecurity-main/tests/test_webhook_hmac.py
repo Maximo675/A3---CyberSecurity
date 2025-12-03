@@ -12,7 +12,11 @@ def sign_payload(payload_dict, secret):
 def test_webhook_rejects_unsigned(client):
     # Create tx as pending
     with client.application.app_context():
-        tx = Transaction(tx_id='test-hmac-1', method='pix', amount=10.0, status='pending')
+        tx = Transaction()
+        tx.tx_id = 'test-hmac-1'
+        tx.method = 'pix'
+        tx.amount = 10.0
+        tx.status = 'pending'
         db.session.add(tx)
         db.session.commit()
 
@@ -25,7 +29,11 @@ def test_webhook_hmac_accepts_signed(client, monkeypatch):
     monkeypatch.setenv('PAYMENT_WEBHOOK_SECRET', secret)
     # Create tx
     with client.application.app_context():
-        tx = Transaction(tx_id='test-hmac-2', method='pix', amount=10.0, status='pending')
+        tx = Transaction()
+        tx.tx_id = 'test-hmac-2'
+        tx.method = 'pix'
+        tx.amount = 10.0
+        tx.status = 'pending'
         db.session.add(tx)
         db.session.commit()
 
@@ -35,4 +43,5 @@ def test_webhook_hmac_accepts_signed(client, monkeypatch):
 
     with client.application.app_context():
         tx = Transaction.query.filter_by(tx_id='test-hmac-2').first()
+        assert tx is not None
         assert tx.status == 'confirmed'
